@@ -143,13 +143,13 @@ for (my $i = 1; $i < $param_n; $i++) {
 
 	my $x = $bpoints_froma_x[$i - 1] + 1.0;
 	my $y = $bpoints_froma_y[$i - 1];
-	
+
 	my $nx = $x * cos($ntheta) - $y * sin($ntheta);
 	my $ny = $x * sin($ntheta) + $y * cos($ntheta);
 
 	$x = $nx - 1.0;
 	$y = $ny;
-	
+
 	$bpoints_froma_x[$i] = $x;
 	$bpoints_froma_y[$i] = $y;
 	$apoints_fromb_x[$i] = $x * -1.0;
@@ -284,7 +284,7 @@ sub val_to_rgb {
 	warn 'Bogus color value: ', $v, "\n";
 	return (0, 0, 0);
     }
-    
+
     my ($r, $g, $b);
 
     if ($v >= 0) {
@@ -313,7 +313,7 @@ sub order_to_val {
     my $o = shift;
     my $aaomin = shift;
     my $aaomax = shift;
-    
+
     my $v;
 
     if ($delta_color == 0) {
@@ -344,7 +344,7 @@ sub order_to_val {
     # a no-no
     $v = 1.0 if ($v > 1.0);
     $v = -1.0 if ($v < -1.0);
-    
+
     return $v;
 }
 
@@ -357,7 +357,7 @@ sub point_to_ixiy {
 	($y + ($pheight / 2.0) < $ymin) || ($y - ($pheight / 2.0) > $ymax)) {
 	return (-1, -1);
     }
-    
+
     my $ix = int((($x - $xmin) / $pwidth) + 0.5);
     my $iy = int((($y - $ymin) / $pheight) + 0.5);
 
@@ -375,7 +375,7 @@ sub ixiy_to_point {
 	($iy < 0) || ($iy >= $h)) {
 	return (-1, -1);
     }
-    
+
     my $x = (($pwidth * ($ix + $ixoff)) + $xmin) - ($pwidth / 2.0);
     my $y = (($pheight * ($iy + $iyoff)) + $ymin) - ($pheight / 2.0);
 
@@ -395,7 +395,7 @@ sub move_point {
     if (dist($x, $y, -1, 0) < $param_r) {
 	# Shift the point over to be centered on the origin
 	$x = $x + 1.0;
-	
+
 	my $nx = $x * $cosatheta - $y * $sinatheta;
 	my $ny = $x * $sinatheta + $y * $cosatheta;
 
@@ -407,7 +407,7 @@ sub move_point {
     if (dist($x, $y, 1, 0) < $param_r) {
 	# Shift the point over to be centered on the origin
 	$x = $x - 1.0;
-	
+
 	my $nx = $x * $cosbtheta - $y * $sinbtheta;
 	my $ny = $x * $sinbtheta + $y * $cosbtheta;
 
@@ -447,7 +447,7 @@ sub neigh_avg_order {
 
     for (my $cix = $ix - 1; $cix <= $ix + 1; $cix++) {
 	next if (($cix < 0) || ($cix >= $w));
-	
+
 	for (my $ciy = $iy - 1; $ciy <= $iy + 1; $ciy++) {
 	    next if (($ciy < 0) || ($ciy >= $h));
 
@@ -473,15 +473,15 @@ sub read_points_file {
     my $fname = shift;
 
     warn 'Reading points from ', $fname, "\n";
-    
+
     open(my $inpoints, '<', $fname) or die 'Unable to open ', $fname, ' for ',
     'reading: ', $!, ' ', $?, "\n";
 
     while (<$inpoints>) {
 	chomp;
-	
+
 	my $line = $_;
-	
+
 	if ($line =~ m/^(-?\d+\.\d{4,12})\s(-?\d+\.\d{4,12})\s(\d+)\s(\d+)$/) {
 	    my ($px, $py, $ordera, $orderb) = ($1, $2, $3, $4);
 
@@ -499,7 +499,7 @@ sub read_points_file {
 	    }
 
 	    add_point($px, $py, $ordr);
-	    
+
 	    if ($symmoves == 1) {
 		my $nx = $px;
 		my $ny = $py;
@@ -525,10 +525,10 @@ sub read_points_file {
 		if ($symmoves == 1) {
 		    my $nx = $px * -1.0;
 		    my $ny = $py * -1.0;
-		    
+
 		    for (my $i = 0; $i < (2 * $param_n); $i++) {
 			($nx, $ny) = move_point($nx, $ny);
-			
+
 			if (inwedge($nx, $ny) == 0) {
 			    $stats_symmoves_scount++;
 			    add_point($nx, $ny, $mordr);
@@ -540,13 +540,13 @@ sub read_points_file {
 		}
 
 	    }
-	    
+
 	}
 	else {
 	    $stats_bogus_samples++;
 	}
     }
-    
+
     close($inpoints);
 
     move($fname, 'processed/' . $fname) or
@@ -560,13 +560,13 @@ sub add_point {
     my $order = shift;
 
     $stats_scount++;
-	
+
     my ($ix, $iy) = point_to_ixiy($px, $py);
 
     #warn 'Got point: ', $px, ' ', $py, "\n";
-	
+
     return if (($ix == -1) || ($iy == -1));
-    
+
     if (($ix < 0) || ($ix >= $w) ||
 	($iy < 0) || ($iy >= $h)) {
 	$stats_bogus_samples++;
@@ -592,7 +592,7 @@ sub add_point {
     $igrid_scount[$ix][$iy] += 1;
 
     #warn 'Sample count for ', $ix, ' ', $iy, ' : ',
-    #$igrid_scount[$ix][$iy], "\n";    
+    #$igrid_scount[$ix][$iy], "\n";
 }
 
 
@@ -611,7 +611,7 @@ sub find_order_min_max {
 	    if ($igrid_scount[$ix][$iy] > 0) {
 
 		my $aao = aa_order_point($ix, $iy);
-		
+
 		if ($aao > $aaomax) {
 		    $aaomax = $aao;
 		}
@@ -677,12 +677,12 @@ sub do_image_pass {
     my ($aaomin, $aaomax) = find_order_min_max();
 
     $stats_passes++;
-    
+
     $stats_data_missing = 0;
     $stats_aa_pixels_needed = 0;
     $stats_aa_samples_needed = 0;
     $stats_border_samples_needed = 0;
-    
+
     GD::Image->trueColor(1);
 
     # 1 indicates true color
@@ -697,7 +697,7 @@ sub do_image_pass {
 		do_work(\@work_queue);
 		@work_queue = ();
 	    }
-	    
+
 	    my $scount = $igrid_scount[$ix][$iy];
 
 	    my ($cx, $cy) = ixiy_to_point($ix, $iy, 0.5, 0.5);
@@ -706,28 +706,28 @@ sub do_image_pass {
 	    my $pindisks = indisks($cx, $cy);
 	    my $pincenter = incenter($cx, $cy);
 	    my $pinborder = inborder($cx, $cy);
-	    
+
 	    # Unsampled data
 	    if ($scount == 0) {
-		
+
 		# If the pixel is in the wedge
 		if (($pinwedge == 1) ||
 		    (($samp_disk_points == 1) &&
 		     ($pindisks == 1) &&
 		     ($pincenter == 0))) {
-		    
+
 		    $stats_data_missing++;
 
 		    $msamp++;
-		    
+
 		    $img->setPixel($ix, ($ih - 1) - $iy, $white_idx);
-		    
+
 		    if ($pinborder == 1) {
 			#print $outsamp '/* Missing border data */', "\n";
 			for (my $i = 0; $i < $border_samples; $i++) {
 			    $stats_border_samples_needed++;
 
-			    
+
 			    push @work_queue, get_point_sample_cmd(
 				ixiy_to_point($ix, $iy,
 					      rand(1), rand(1)));
@@ -735,7 +735,7 @@ sub do_image_pass {
 			}
 		    }
 		    elsif ($samp_only_border == 0) {
-			
+
 			# we could only sample pixels that have all
 			# their neigbors filled in or whoes surronding
 			# pixels have loweish order but neither of
@@ -749,7 +749,7 @@ sub do_image_pass {
 			push @work_queue, get_point_sample_cmd(
 			    ixiy_to_point($ix, $iy,
 					  rand(1), rand(1)));
-			    
+
 			#}
 			#}
 		    }
@@ -766,7 +766,7 @@ sub do_image_pass {
 		else {
 		    # Not in the wedge (or disks or we aren't sampling
 		    # non-wedge points
-		    
+
 		    $img->setPixel($ix, ($ih - 1) - $iy, $black_idx);
 		}
 	    } # end sample count is zero
@@ -782,19 +782,19 @@ sub do_image_pass {
 		if ($aao < $aaomin) {
 		    $aaomin = $aao;
 		}
-		
+
 		$stats_pcount++;
-		
+
 		# See if we may want to re-sample this point for
 		# better AA
-		if (($pinwedge == 1) && 
+		if (($pinwedge == 1) &&
 		    (($pinborder == 1) || ($samp_only_border == 0))){
 		    #if ($aao < $aa_ord_cutoff) { # doesnt make sense for delta
 		    if ($scount < $aa_samp) {
 			my $neigh_avg = neigh_avg_order($ix, $iy);
-			
+
 			if ($neigh_avg != -1) {
-			    
+
 			    # It is possible that points collected
 			    # could have reduced the order of
 			    # neighboring pixels but we haven't
@@ -811,31 +811,31 @@ sub do_image_pass {
 				 (1.0 / 255.0))) {
 
 				$stats_aa_pixels_needed++;
-				
+
 				$asamp++;
-				
+
 				#print $outsamp '/* AA re-sample */', "\n";
 				for (my $i = $scount; $i < $aa_samp; $i++) {
 				    $stats_aa_samples_needed++;
-				    
+
 				    push @work_queue, get_point_sample_cmd(
 					ixiy_to_point($ix, $iy,
 						      rand(1), rand(1)));
-				    
+
 				}
 			    }
 			}
 		    }
 		}
 		#warn 'Got aa order: ', $aa_order, "\n";
-		
+
 		my @c = val_to_rgb(order_to_val($aao, $aaomin, $aaomax));
-		
+
 		my $cidx = $img->colorAllocate(@c);
-		
+
 		$img->setPixel($ix, ($ih - 1) - $iy, $cidx);
 	    }
-	    
+
 	} # End for IY
     } # End for IX
 
@@ -872,15 +872,15 @@ sub do_image_pass {
 	do_work(\@work_queue);
 	@work_queue = ();
     }
-    
+
     #
 
 
     open(my $outimg, '>', $IMG_NAME) or
 	die 'Unable to open ', $IMG_NAME, ' for writing: ', $!, ' ', $?, "\n";
-    
+
     print $outimg $img->png();
-    
+
     close($outimg);
 
     write_state_files();
@@ -915,11 +915,11 @@ sub do_work {
     my %pnames;
 
     my $wq_len = scalar @{$wq_ref};
-    
+
     for (my $n = 0; $n < $parallelism; $n++) {
-    
+
 	my $sesid = get_session_id();
-    
+
 	my $W_NAME = sprintf('gg_delta_samples_n%d_r%.8f_a%db%d_%s.gp',
 			     $param_n, $param_r, $aturn, $bturn, $sesid);
 
@@ -955,7 +955,7 @@ sub do_work {
 	    $children++;
 	}
     }
-    
+
     while ($children > 0) {
 	wait();
 	$children--;
@@ -1032,7 +1032,7 @@ sub read_state_files {
 	for (my $i = 0; $i < $w; $i++) {
 	    my @orcol = ((0) x $h);
 	    my @sccol = ((0) x $h);
-	    
+
 	    push @igrid_order, [@orcol];
 	    push @igrid_scount, [@sccol];
 	}
@@ -1046,16 +1046,16 @@ sub read_state_files {
 	    my $line = $_;
 
 	    next if ($line =~ m/^\s*#/);
-	    
+
 	    my @row = split(/\s+/, $line);
-	    
+
 	    for (my $ix = 0; $ix < $w; $ix++) {
 		$igrid_order[$ix][$iy] = $row[$ix] * 1.0;
 	    }
 
 	    $iy++;
 	}
-	
+
 	$iy = 0;
 	while (<$SCFH>) {
 	    chomp;
@@ -1063,9 +1063,9 @@ sub read_state_files {
 	    my $line = $_;
 
 	    next if ($line =~ m/^\s*#/);
-	    
+
 	    my @row = split(/\s+/, $line);
-	    
+
 	    for (my $ix = 0; $ix < $w; $ix++) {
 		$igrid_scount[$ix][$iy] = int($row[$ix]);
 	    }
@@ -1083,7 +1083,7 @@ sub read_state_files {
 	for (my $i = 0; $i < $w; $i++) {
 	    my @orcol = ((0) x $h);
 	    my @sccol = ((0) x $h);
-	    
+
 	    push @igrid_order, [@orcol];
 	    push @igrid_scount, [@sccol];
 	}
@@ -1092,7 +1092,7 @@ sub read_state_files {
 
 
 sub try_save {
-    
+
     my $curtime = time();
 
     if ($curtime - $lastsave >= $saverate) {
@@ -1119,7 +1119,7 @@ sub get_session_id {
 sub render_image {
 
     my ($prev_msamp, $prev_asamp) = do_image_pass();
-    
+
     my $done = 0;
     if (($prev_msamp == 0) && ($prev_asamp == 0)) {
 	warn 'No work left to be done!', "\n";
