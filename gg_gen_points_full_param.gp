@@ -145,23 +145,26 @@ if(count > l, printf("# %.10f %.10f HIT LIMIT %d\n", startpoint[1], startpoint[2
 
 
 pointcycle_ab_delta(param_n, param_r, p, an, bn, l) = {
+my(counta,countb,startpoint,point);
 counta = 0;
 countb = 0;
 startpoint = p;
 point = startpoint;
 
+my(twista,twistb,twistan,twistbn);
 twista = tm2d(-1, 0) * rm2d((2 * Pi) / param_n) * tm2d(1, 0);
 twistb = tm2d(1, 0) * rm2d((2 * Pi) / param_n) * tm2d(-1, 0);
 
 twistan = twista^an;
 twistbn = twistb^bn;
 
+my(wpoints);
 wpoints = List();
 until(dist(point, startpoint) < min_thresh,
 
-if(incirca(param_r, point) == 1, point=twistan*point; counta = counta + 1; /*if(inwedge(point) == 1, listput(wpoints,point); ,);*/,);
+if(incirca(param_r, point) == 1, point=twistan*point; counta++; /*if(inwedge(point) == 1, listput(wpoints,point); ,);*/,);
 
-if(incircb(param_r, point) == 1, point=twistbn*point; countb = countb + 1; if(inwedge(param_r, point) == 1, listput(wpoints,point);,);,);
+if(incircb(param_r, point) == 1, point=twistbn*point; countb++; if(inwedge(param_r, point) == 1, listput(wpoints,point);,);,);
 
 if(counta + countb > l, break(),);
 
