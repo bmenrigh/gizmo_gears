@@ -55,8 +55,12 @@ rpoint() = [(random(1.0) * (2 * wwidth)) - wwidth, (random(1.0) * (2 * wheight))
 
 inzbox(p) = if(p[1] >= zboxminx, if(p[1] <= zboxmaxx, if(p[2] >= zboxminy, if(p[2] <= zboxmaxy, 1, 0), 0), 0), 0);
 
+dista(p) = {dist(p, [-1, 0, 1]~);};
+distb(p) = {dist(p, [1, 0, 1]~);};
 incirca(param_r, p) = {if(dist(p, [-1, 0, 1]~) <= param_r, 1, 0);};
 incircb(param_r, p) = {if(dist(p, [1, 0, 1]~) <= param_r, 1, 0);};
+tobordera(param_r, p) = {(param_r - dista(p)) / param_r};
+toborderb(param_r, p) = {(param_r - distb(p)) / param_r};
 
 inwedge(param_r, p) = {if(incirca(param_r, p) == 1, if(incircb(param_r, p) == 1, 1, 0);, 0);}
 
@@ -151,6 +155,9 @@ countb = 0;
 startpoint = p;
 point = startpoint;
 
+my(toborder);
+toborder = 1;
+
 my(twista,twistb,twistan,twistbn);
 twista = tm2d(-1, 0) * rm2d((2 * Pi) / param_n) * tm2d(1, 0);
 twistb = tm2d(1, 0) * rm2d((2 * Pi) / param_n) * tm2d(-1, 0);
@@ -162,15 +169,15 @@ my(wpoints);
 wpoints = List();
 until(dist(point, startpoint) < min_thresh,
 
-if(incirca(param_r, point) == 1, point=twistan*point; counta++; /*if(inwedge(point) == 1, listput(wpoints,point); ,);*/,);
+if(incirca(param_r, point) == 1, toborder=min(toborder, tobordera(param_r, point)); point=twistan*point; counta++; /*if(inwedge(point) == 1, listput(wpoints,point); ,);*/,);
 
-if(incircb(param_r, point) == 1, point=twistbn*point; countb++; if(inwedge(param_r, point) == 1, listput(wpoints,point);,);,);
+if(incircb(param_r, point) == 1, toborder=min(toborder, toborderb(param_r, point)); point=twistbn*point; countb++; if(inwedge(param_r, point) == 1, listput(wpoints,point);,);,);
 
 if(counta + countb > l, break(),);
 
 );
 
-if(counta + countb > l, printf("# %.10f %.10f HIT LIMIT %d\n", startpoint[1], startpoint[2], l), wc = length(wpoints); for(x = 1, wc, printf("%.10f %.10f %d %d\n", wpoints[x][1], wpoints[x][2], counta, countb)););
+if(counta + countb > l, printf("# %.10f %.10f HIT LIMIT %d\n", startpoint[1], startpoint[2], l), wc = length(wpoints); for(x = 1, wc, printf("%.15f %.15f %d %d %.15f\n", wpoints[x][1], wpoints[x][2], counta, countb, toborder)););
 };
 
 

@@ -9,16 +9,16 @@ use Math::Round;
 use File::Glob;
 use File::Copy;
 
-my $parallelism = 16;
+my $parallelism = 4;
 my $children = 0;
 
 my $PI = 3.14159265358979323846264;
 
-my $param_n = 13;
-my $param_r = 1.213989;
-my $param_r_txt = '1.213989';
+my $param_n = 8;
+my $param_r = 1.71133;
+my $param_r_txt = '1.71133';
 
-my $aturn = 12;
+my $aturn = 7;
 my $bturn = 1;
 
 # Negative because turns for this puzzle are clockwise
@@ -56,7 +56,8 @@ my $w = int(($wwidth / $wheight) * $h);
 
 my $ih = $h; # Actual image height accounting for legend
 
-my $delta_color = 0;
+my $delta_color = 0; # Are colors based on delta, not absolute order?
+my $border_color = 1; # Are colors based on border distance, not order?
 my $add_color_legend = 1;
 my $legend_pad = 16;
 my $legend_height = 32;
@@ -72,12 +73,12 @@ my $pradius = sqrt(($pwidth ** 2.0) + ($pheight ** 2.0));
 my $border_innerr = $param_r - (2.0 * $pradius);
 my $border_outerr = $param_r + (2.0 * $pradius);
 
-my $aa_samp = 8;
+my $aa_samp = 16;
 #my $aa_ord_cutoff = 200 * 1 * 1000;
-my $border_samples = 64;
+my $border_samples = 1024;
 #my $missing_data_cutoff = 2 * 1000 * 1000; # Not used for delta A/B code
-my $point_sample_cutoff = 500 * 1 * 1000;
-my $wq_batch_size = 500 * $parallelism;
+my $point_sample_cutoff = 10 * 1000 * 1000;
+my $wq_batch_size = 1000 * $parallelism;
 my $samp_disk_points = 0;
 my $samp_only_border = 0;
 
@@ -102,7 +103,7 @@ else {
     $cmax_idx = $cimg->colorAllocate(val_to_rgb(1.0));
 }
 
-my $aa_log = 0; # Use the geometric mean rather than average
+my $aa_log = 1; # Use the geometric mean rather than average
 
 #my $usezbox = 1;
 my $usezbox = 0;
@@ -161,19 +162,22 @@ my $omin = 2000000000; # Large number. min should always be less than this ;-)
 my $omax = 0;
 
 
-my $OG_NAME = sprintf('gg_delta_state_ogrid_d%d_n%d_r%.8f_a%db%d_%dx%d_' .
+my $OG_NAME = sprintf('gg_delta_state_ogrid_d%d_b%d_n%d_r%.8f_a%db%d_%dx%d_' .
 		      '[%f,%f]_[%f,%f].ggs',
-		      $delta_color, $param_n, $param_r, $aturn, $bturn, $w, $h,
+		      $delta_color, $border_color,
+		      $param_n, $param_r, $aturn, $bturn, $w, $h,
 		      $xmin, $xmax, $ymin, $ymax);
 
-my $SC_NAME = sprintf('gg_delta_state_scount_d%d_n%d_r%.8f_a%db%d_%dx%d_' .
+my $SC_NAME = sprintf('gg_delta_state_scount_d%d_b%d_n%d_r%.8f_a%db%d_%dx%d_' .
 		      '[%f,%f]_[%f,%f].ggs',
-		      $delta_color, $param_n, $param_r, $aturn, $bturn, $w, $h,
+		      $delta_color, $border_color,
+		      $param_n, $param_r, $aturn, $bturn, $w, $h,
 		      $xmin, $xmax, $ymin, $ymax);
 
-my $IMG_NAME = sprintf('gg_delta_img_fulld_d%d_n%d_r%.8f_a%db%d_%dx%d_' .
+my $IMG_NAME = sprintf('gg_delta_img_fulld_d%d_b%d_n%d_r%.8f_a%db%d_%dx%d_' .
 		       '[%f,%f]_[%f,%f].png',
-		       $delta_color, $param_n, $param_r,
+		       $delta_color, $border_color,
+		       $param_n, $param_r,
 		       $aturn, $bturn, $w, $h,
 		       $xmin, $xmax, $ymin, $ymax);
 
@@ -482,20 +486,27 @@ sub read_points_file {
 
 	my $line = $_;
 
-	if ($line =~ m/^(-?\d+\.\d{4,12})\s(-?\d+\.\d{4,12})\s(\d+)\s(\d+)$/) {
-	    my ($px, $py, $ordera, $orderb) = ($1, $2, $3, $4);
+	if ($line =~ m/^(-?\d+\.\d{4,16})\s(-?\d+\.\d{4,16})\s
+                       (\d+)\s(\d+)\s(\d+\.\d{4,16})$/x) {
+	    my ($px, $py, $ordera, $orderb, $toborder) = ($1, $2, $3, $4, $5);
 
 	    next if ($ordera == 0);
 	    next if ($orderb == 0);
 
 	    my ($ordr, $mordr);
-	    if ($delta_color == 0) {
-		$ordr = ($ordera * 1.0) + ($orderb * 1.0);
-		$mordr = ($ordera * 1.0) + ($orderb * 1.0);
+	    if ($border_color == 0) {
+		if ($delta_color == 0) {
+		    $ordr = ($ordera * 1.0) + ($orderb * 1.0);
+		    $mordr = $ordr;
+		}
+		else {
+		    $ordr = ($ordera * 1.0) / ($orderb * 1.0);
+		    $mordr = ($orderb * 1.0) / ($ordera * 1.0);
+		}
 	    }
 	    else {
-		$ordr = ($ordera * 1.0) / ($orderb * 1.0);
-		$mordr = ($orderb * 1.0) / ($ordera * 1.0);
+		$ordr = (1.0 / $toborder);
+		$mordr = $ordr;
 	    }
 
 	    add_point($px, $py, $ordr);
