@@ -16,7 +16,7 @@ my $PI = 3.14159265358979323846264;
 
 my $param_n = 5;
 #my $param_r = sqrt((7 + sqrt(5)) / 2);
-my $param_r = 2.1;
+my $param_r = 2;
 #my $param_r_txt = 'sqrt((7 + sqrt(5)) / 2)';
 my $param_r_txt = '2';
 
@@ -70,6 +70,7 @@ my $ih = $h; # Actual image height accounting for legend
 my $delta_color = 1; # Are colors based on delta, not absolute order?
 my $smooth_delta = 1; # Should color be smooth across ratio of a/b near 1?
 my $border_color = 0; # Are colors based on border distance, not order?
+my $blend_border = 1; # Should border pixels get blended with black?
 my $add_color_legend = 1;
 my $legend_pad = 16;
 my $legend_height = 32;
@@ -77,9 +78,13 @@ if ($add_color_legend == 1) {
     $ih = $h + $legend_pad + $legend_height;
 }
 
-
-my $pwidth = (($xmax - $xmin) / ($w * 1.0));
-my $pheight = (($ymax - $ymin) / ($h * 1.0));
+# We have to substract 1 from the width and hight here because
+# the point 0, 0 is actually in the center of a pixel
+# which means we have each pixel stick out .5 to the top, bottom, left, and
+# right of the disks / wedge.  This means we have 1 extra pixel worth of
+# height and width we must account for
+my $pwidth = (($xmax - $xmin) / (($w - 1.0) * 1.0));
+my $pheight = (($ymax - $ymin) / (($h - 1.0) * 1.0));
 my $pradius = sqrt(($pwidth ** 2.0) + ($pheight ** 2.0));
 
 my $border_innerr = $param_r - (2.0 * $pradius);
@@ -433,6 +438,62 @@ sub ixiy_to_point {
 }
 
 
+sub is_border_pixel {
+    my $ix = shift;
+    my $iy = shift;
+
+    # A border pixel has at least one corner in the disks
+    # and at least one corner out of the disks
+    my $incount = 0;
+    my ($x, $y);
+
+    # Check corner 1
+    ($x, $y) = ixiy_to_point($ix, $iy, 0, 0);
+    $incount += 1 if (indisks($x, $y) == 1);
+
+    # Check corner 2
+    ($x, $y) = ixiy_to_point($ix, $iy, 0, 1);
+    $incount += 1 if (indisks($x, $y) == 1);
+
+    # Check corner 3
+    ($x, $y) = ixiy_to_point($ix, $iy, 1, 0);
+    $incount += 1 if (indisks($x, $y) == 1);
+
+    # Check corner 4
+    ($x, $y) = ixiy_to_point($ix, $iy, 1, 1);
+    $incount += 1 if (indisks($x, $y) == 1);
+
+    if (($incount > 0) && ($incount < 4)) {
+	return 1;
+    }
+
+    return 0;
+}
+
+
+sub border_blend_amount {
+    my $ix = shift;
+    my $iy = shift;
+
+    # A border pixel is a square and not all of its area is in the disks
+    # Some of the area is outside of the puzzle and should be black
+    # so this function samples a bunch of points in the pixel
+    # to see how much of the pixel's area is inside of the disks
+
+    my $samplecount = 1024;
+
+    my ($x, $y);
+
+    my $incount = 0;
+    for (my $i = 0; $i < $samplecount; $i++) {
+	($x, $y) = ixiy_to_point($ix, $iy, rand(), rand());
+	$incount += 1 if (indisks($x, $y) == 1);
+    }
+
+    return (($incount * 1.0) / ($samplecount * 1.0));
+}
+
+
 sub move_point {
     my $x = shift;
     my $y = shift;
@@ -764,6 +825,11 @@ sub do_image_pass {
 	    my $pincenter = incenter($cx, $cy);
 	    my $pinborder = inborder($cx, $cy);
 
+	    my $isborderpixel = 0;
+	    if (($pinborder == 1) && ($blend_border == 1)) {
+		$isborderpixel = is_border_pixel($ix, $iy);
+	    }
+
 	    # Unsampled data
 	    if ($scount == 0) {
 
@@ -887,6 +953,18 @@ sub do_image_pass {
 		#warn 'Got aa order: ', $aa_order, "\n";
 
 		my @c = val_to_rgb(order_to_val($aao, $aaomin, $aaomax));
+
+		# If this is a border pixel we should blend with black
+		if (($blend_border == 1) &&
+		    ($pinborder == 1) &&
+		    ($isborderpixel == 1)) {
+
+		    my $blend_v = border_blend_amount($ix, $iy);
+
+		    $c[0] = round($c[0] * $blend_v);
+		    $c[1] = round($c[1] * $blend_v);
+		    $c[2] = round($c[2] * $blend_v);
+		}
 
 		my $cidx = $img->colorAllocate(@c);
 
