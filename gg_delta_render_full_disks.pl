@@ -67,9 +67,9 @@ my $w = int(($wwidth / $wheight) * $h);
 
 my $ih = $h; # Actual image height accounting for legend
 
-my $delta_color = 0; # Are colors based on delta, not absolute order?
-my $smooth_delta = 1; # Should color be smooth across ratio of a/b near 1?
-my $border_color = 1; # Are colors based on border distance, not order?
+my $delta_color = 1; # Are colors based on delta, not absolute order?
+my $smooth_delta = 0; # Should color be smooth across ratio of a/b near 1?
+my $border_color = 0; # Are colors based on border distance, not order?
 my $blend_border = 1; # Should border pixels get blended with black?
 my $add_color_legend = 1;
 my $legend_pad = 16;
@@ -77,6 +77,10 @@ my $legend_height = 32;
 if ($add_color_legend == 1) {
     $ih = $h + $legend_pad + $legend_height;
 }
+
+my $normalize_color_histogram = 0;
+my $histogram_steps = 1024;
+my @normalized_table = ((0) x ($histogram_steps + 1));
 
 # We have to substract 1 from the width and hight here because
 # the point 0, 0 is actually in the center of a pixel
@@ -772,14 +776,104 @@ sub find_order_min_max {
 	# Due to divide-by-zero issues with atan2 these need to be
 	# less than or greater than 1.0
 	if ($aaomin >= 1) {
-	    $aaomin = 0.999;
+	    $aaomin = 0.9999999;
 	}
 	if ($aaomax <= 1) {
-	    $aaomax = 1.001;
+	    $aaomax = 1.0000001;
 	}
     }
 
     return ($aaomin, $aaomax);
+}
+
+
+sub normalize_histogram_table {
+    my $aaomin = shift;
+    my $aaomax = shift;
+
+    my @histogram = ((0) x ($histogram_steps + 1));
+
+    my $vscale;
+    my $voffset;
+
+    if ($delta_color == 1) {
+	$vscale = 2.0;
+	$voffset = 1.0;
+    }
+    else {
+	$vscale = 1.0;
+	$voffset = 0.0;
+    }
+
+    my $scount = 0;
+    for (my $ix = 0; $ix < $w; $ix++) {
+	for (my $iy = 0; $iy < $h; $iy++) {
+
+	    if ($igrid_scount[$ix][$iy] > 0) {
+
+		my $neigh_avg = neigh_avg_order($ix, $iy);
+		my $v = order_to_val($neigh_avg, $aaomin, $aaomax);
+
+		my $bucket = int(($v + $voffset) *
+				 (($histogram_steps - 1.0) / $vscale));
+
+		$histogram[$bucket]++;
+
+		$scount++;
+	    }
+	}
+    }
+
+    if ($scount > 0) {
+	my $cur = -1.0 * $voffset;
+
+	for (my $i = 0; $i <= $histogram_steps; $i++) {
+	    $normalized_table[$i] = $cur;
+	    $cur += $vscale * (($histogram[$i] * 1.0) / ($scount * 1.0));
+	}
+
+    }
+    else {
+	die 'Tried to normalize histogram with no samples!', "\n";
+    }
+}
+
+
+sub normalize_val {
+    my $v = shift;
+
+    my $vscale;
+    my $voffset;
+
+    if ($delta_color == 1) {
+	$vscale = 2.0;
+	$voffset = 1.0;
+    }
+    else {
+	$vscale = 1.0;
+	$voffset = 0.0;
+    }
+    # Find what bucket this would be in if buckets were floats
+    my $bucket_f = ($v + $voffset) * (($histogram_steps - 1.0) / $vscale);
+
+    # The value for the actual bucket this is in
+    my $bv = $normalized_table[int($bucket_f)];
+    # The value for the next bucket up
+    my $nbv = $normalized_table[int($bucket_f) + 1];
+
+    # The actual value for v is interpolate from the bucket's base
+    # value to the next bucket's base value based on how close
+    # bucket_f is to the current bucket veruses the next bucket
+    my $nv = $bv + (($nbv - $bv) * ($bucket_f - int($bucket_f)));
+
+    if ($nv > 1.0) {
+	$nv = 1.0;
+    }
+    if ($nv < -1.0) {
+	$nv = -1.0;
+    }
+
+    return $nv;
 }
 
 
@@ -821,6 +915,10 @@ sub do_image_pass {
     my @work_queue = ();
     my ($msamp, $asamp) = (0, 0);
     my ($aaomin, $aaomax) = find_order_min_max();
+
+    if ($normalize_color_histogram == 1) {
+	normalize_histogram_table($aaomin, $aaomax);
+    }
 
     $stats_passes++;
 
@@ -954,11 +1052,17 @@ sub do_image_pass {
 			    # large so we must check that the neighbor
 			    # average is greater than the min order
 
+			    my $neigh_v = order_to_val($neigh_avg, $aaomin,
+						       $aaomax);
+			    my $aao_v = order_to_val($aao, $aaomin,
+						     $aaomax);
+			    if ($normalize_color_histogram == 1) {
+				$neigh_v = normalize_val($neigh_v);
+				$aao_v = normalize_val($aao_v);
+			    }
+
 			    if (($neigh_avg < $aaomin) ||
-				(abs(order_to_val($neigh_avg, $aaomin,
-						  $aaomax) -
-				     order_to_val($aao, $aaomin,
-						  $aaomax)) >
+				(abs($neigh_v - $aao_v) >
 				 (1.0 / 255.0))) {
 
 				$stats_aa_pixels_needed++;
@@ -980,7 +1084,13 @@ sub do_image_pass {
 		}
 		#warn 'Got aa order: ', $aa_order, "\n";
 
-		my @c = val_to_rgb(order_to_val($aao, $aaomin, $aaomax));
+		my $aao_v = order_to_val($aao, $aaomin,
+					 $aaomax);
+		if ($normalize_color_histogram == 1) {
+		    $aao_v = normalize_val($aao_v);
+		}
+
+		my @c = val_to_rgb($aao_v);
 
 		# If this is a border pixel we should blend with black
 		if (($blend_border == 1) &&
@@ -1011,8 +1121,13 @@ sub do_image_pass {
 	if ($delta_color == 0) {
 	    for (my $ix = 0; $ix < $w; $ix++) {
 		for (my $iy = $h + $legend_pad; $iy < $ih; $iy++) {
-		    my $legend_idx = $cimg->
-			colorAllocate(val_to_rgb((1.0 / ($w - 1)) * $ix));
+		    my $hv = ((1.0 / ($w - 1)) * $ix);
+
+		    if ($normalize_color_histogram == 1) {
+			$hv = normalize_val($hv);
+		    }
+
+		    my $legend_idx = $cimg->colorAllocate(val_to_rgb($hv));
 		    $img->setPixel($ix, ($ih - 1) - $iy, $legend_idx);
 		}
 	    }
@@ -1020,9 +1135,13 @@ sub do_image_pass {
 	else {
 	    for (my $ix = 0; $ix < $w; $ix++) {
 		for (my $iy = $h + $legend_pad; $iy < $ih; $iy++) {
-		    my $legend_idx = $cimg->
-			colorAllocate(val_to_rgb(((-2.0 / ($w - 1)) *
-						  $ix) + 1.0));
+		    my $hv = (((-2.0 / ($w - 1)) * $ix) + 1.0);
+
+		    if ($normalize_color_histogram == 1) {
+			$hv = normalize_val($hv);
+		    }
+
+		    my $legend_idx = $cimg->colorAllocate(val_to_rgb($hv));
 		    $img->setPixel($ix, ($ih - 1) - $iy, $legend_idx);
 		}
 	    }
