@@ -16,9 +16,9 @@ my $PI = 3.14159265358979323846264;
 
 my $param_n = 5;
 #my $param_r = sqrt((7 + sqrt(5)) / 2);
-my $param_r = 2;
+my $param_r = sqrt((7 + sqrt(5)) / 2);
 #my $param_r_txt = 'sqrt((7 + sqrt(5)) / 2)';
-my $param_r_txt = '2';
+my $param_r_txt = 'sqrt((7 + sqrt(5)) / 2)';
 
 my $aturn = 4;
 my $bturn = 1;
@@ -35,25 +35,25 @@ my $sinbtheta = sin($btheta);
 
 
 # === These settings work for showing the disks
-my $goalw = 1024;
-my $scalef = ($goalw * 1.0) / ((2.0 * $param_r) + 2.0);
+#my $goalw = 512;
+#my $scalef = ($goalw * 1.0) / ((2.0 * $param_r) + 2.0);
 
-my $w = int(((2.0 * $param_r) + 2.0) * $scalef);
-my $h = int(2.0 * $param_r * $scalef);
+#my $w = int(((2.0 * $param_r) + 2.0) * $scalef);
+#my $h = int(2.0 * $param_r * $scalef);
 
-my ($xmin, $xmax) = (-1.0 - $param_r, 1.0 + $param_r);
-my ($ymin, $ymax) = (-1.0 * $param_r, 1.0 * $param_r);
+#my ($xmin, $xmax) = (-1.0 - $param_r, 1.0 + $param_r);
+#my ($ymin, $ymax) = (-1.0 * $param_r, 1.0 * $param_r);
 #===
 
 # === These settings work for showing the wedge
-#my $wheight = sqrt(($param_r ** 2) - 1);
-#my $wwidth = $param_r - 1;
+my $wheight = sqrt(($param_r ** 2) - 1);
+my $wwidth = $param_r - 1;
 
-#my ($xmin, $xmax) = (-1.0 * $wwidth, 1.0 * $wwidth);
-#my ($ymin, $ymax) = (-1.0 * $wheight, 1.0 * $wheight);
+my ($xmin, $xmax) = (-1.0 * $wwidth, 1.0 * $wwidth);
+my ($ymin, $ymax) = (-1.0 * $wheight, 1.0 * $wheight);
 
-#my $h = 4096;
-#my $w = int(($wwidth / $wheight) * $h);
+my $h = 512;
+my $w = int(($wwidth / $wheight) * $h);
 # ===
 
 # === These settings work for "zooming" into a smaller region
@@ -67,9 +67,9 @@ my ($ymin, $ymax) = (-1.0 * $param_r, 1.0 * $param_r);
 
 my $ih = $h; # Actual image height accounting for legend
 
-my $delta_color = 1; # Are colors based on delta, not absolute order?
+my $delta_color = 0; # Are colors based on delta, not absolute order?
 my $smooth_delta = 1; # Should color be smooth across ratio of a/b near 1?
-my $border_color = 0; # Are colors based on border distance, not order?
+my $border_color = 1; # Are colors based on border distance, not order?
 my $blend_border = 1; # Should border pixels get blended with black?
 my $add_color_legend = 1;
 my $legend_pad = 16;
@@ -90,14 +90,22 @@ my $pradius = sqrt(($pwidth ** 2.0) + ($pheight ** 2.0));
 my $border_innerr = $param_r - (2.0 * $pradius);
 my $border_outerr = $param_r + (2.0 * $pradius);
 
+# Sampling controls
 my $aa_samp = 16;
 #my $aa_ord_cutoff = 200 * 1 * 1000;
 my $border_samples = 1024;
-#my $missing_data_cutoff = 2 * 1000 * 1000; # Not used for delta A/B code
-my $point_sample_cutoff = 1 * 1000 * 1000;
-my $wq_batch_size = 20000 * $parallelism;
-my $samp_disk_points = 1;
+my $samp_disk_points = 0;
 my $samp_only_border = 0;
+#my $missing_data_cutoff = 2 * 1000 * 1000; # Not used for delta A/B code
+my $max_point_sample_cutoff = 16 * 1024 * 1024;
+my $start_point_sample_cutoff = 64 * 1024;
+my $min_wq_batch_size = 4 * $parallelism;
+my $start_wq_batch_size = 4096 * $parallelism;
+my $sample_round_factor = 2; # How much to change these limits each pass
+
+my $point_sample_cutoff = $start_point_sample_cutoff;
+my $wq_batch_size = $start_wq_batch_size;
+
 
 my $lastsave = time();
 my $saverate = 10 * 60; # 10 minutes
@@ -125,7 +133,7 @@ my $aa_log = 1; # Use the geometric mean rather than average
 #my $usezbox = 1;
 my $usezbox = 0;
 my $sym180 = 1;
-my $symmoves = 1; # Rotates points all the way around the disks
+my $symmoves = 0; # Rotates points all the way around the disks
 #my $sym180 = 0;
 
 my $stats_pcount = 0;
@@ -308,7 +316,7 @@ sub val_to_rgb {
 
     my ($r, $g, $b);
 
-    if ($smooth_delta == 0) {
+    if (($delta_color == 0) || ($smooth_delta == 0)) {
 	if ($v >= 0) {
 	    $v *= ($PI / 2.0);
 
@@ -612,8 +620,28 @@ sub read_points_file {
 		}
 	    }
 	    else {
-		$ordr = (1.0 / $toborder);
-		$mordr = $ordr;
+		if ($delta_color == 1) {
+		    # TODO: make this actually work
+		    # It needs to somehow scale numbers very close
+		    # to zero to be very close to 1
+		    # and numbers not so close to 0 need to be close
+		    # to zero or huge depending on if aturn > bturn
+
+		    # Scale proximity to large number
+		    my $recip = 1.0 + (1.0 / $toborder);
+		    if ($ordera > $orderb) {
+			$ordr = $recip;
+			$mordr = (1.0 / $ordr);
+		    }
+		    else {
+			$ordr = 1.0 / $recip;
+			$mordr = $recip;
+		    }
+		}
+		else {
+		    $ordr = (1.0 / $toborder);
+		    $mordr = $ordr;
+		}
 	    }
 
 	    add_point($px, $py, $ordr);
@@ -1263,6 +1291,23 @@ sub render_image {
 
     my $no_aa_progress = 0;
     while ($done == 0) {
+
+	# Adjust paramaters each round
+	$point_sample_cutoff = round($point_sample_cutoff *
+				     $sample_round_factor);
+
+	if ($point_sample_cutoff > $max_point_sample_cutoff) {
+	    $point_sample_cutoff = $max_point_sample_cutoff;
+	}
+
+	$wq_batch_size = round($wq_batch_size /
+			       $sample_round_factor);
+
+	if ($wq_batch_size < $min_wq_batch_size) {
+	    $wq_batch_size = $min_wq_batch_size;
+	}
+
+	# Now do a pass with the new parameters
 	my ($msamp, $asamp) = do_image_pass();
 
 	if (($msamp == 0) && ($asamp == 0)) {
