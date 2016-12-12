@@ -6,6 +6,9 @@ allocatemem();
 
 setrand(extern("date +%s"));
 
+/* Stop processing after some limit */
+limitcount = 0;
+
 /* param_n = 12; */
 /* param_r = sqrt(2); */
 /* param_r = 1.377; */
@@ -148,12 +151,14 @@ if(count > l, printf("# %.10f %.10f HIT LIMIT %d\n", startpoint[1], startpoint[2
 };
 
 
-pointcycle_ab_delta(param_n, param_r, p, an, bn, l) = {
+pointcycle_ab_delta(param_n, param_r, p, an, bn, l, skipl) = {
 my(counta,countb,startpoint,point);
 counta = 0;
 countb = 0;
 startpoint = p;
 point = startpoint;
+
+if(limitcount >= skipl, return;,;);
 
 my(toborder);
 toborder = 1;
@@ -177,7 +182,7 @@ if(counta + countb > l, break(),);
 
 );
 
-if(counta + countb > l, printf("# %.10f %.10f HIT LIMIT %d\n", startpoint[1], startpoint[2], l), wc = length(wpoints); for(x = 1, wc, printf("%.15f %.15f %d %d %.15f\n", wpoints[x][1], wpoints[x][2], counta, countb, toborder)););
+if(counta + countb > l,limitcount = limitcount + 1; printf("# %.12f %.12f HIT LIMIT %d\n", startpoint[1], startpoint[2], l), wc = length(wpoints); for(x = 1, wc, printf("%.15f %.15f %d %d %.15f\n", wpoints[x][1], wpoints[x][2], counta, countb, toborder)););
 };
 
 

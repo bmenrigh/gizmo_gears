@@ -101,11 +101,14 @@ my $border_samples = 1024;
 my $samp_disk_points = 0;
 my $samp_only_border = 0;
 #my $missing_data_cutoff = 2 * 1000 * 1000; # Not used for delta A/B code
-my $max_point_sample_cutoff = 16 * 1024 * 1024;
+my $max_point_sample_cutoff = 2 * 1024 * 1024;
 my $start_point_sample_cutoff = 64 * 1024;
 my $min_wq_batch_size = 4 * $parallelism;
 my $start_wq_batch_size = 4096 * $parallelism;
 my $sample_round_factor = 2; # How much to change these limits each pass
+my $failed_sample_retry_count = 16 * $parallelism;
+my $failed_sample_retry_cutoff = 8 * 1024 * 1024;
+my $skip_after_sample_failure = 16; # Stop sampling points after N failures
 
 my $point_sample_cutoff = $start_point_sample_cutoff;
 my $wq_batch_size = $start_wq_batch_size;
@@ -594,6 +597,7 @@ sub neigh_avg_order {
 
 sub read_points_file {
     my $fname = shift;
+    my $failed_points_ref = shift;
 
     warn 'Reading points from ', $fname, "\n";
 
@@ -691,9 +695,17 @@ sub read_points_file {
 
 	    }
 
-	}
+	} # End if line matches good point
 	else {
-	    $stats_bogus_samples++;
+	    if ($line =~ m/^#\s(-?\d+\.\d{4,16})\s(-?\d+\.\d{4,16})\sHIT\sLIMIT/) {
+		#warn 'Failing point:', $1, ', ', $2, "\n";
+		push @$failed_points_ref,
+		get_point_sample_cmd($1, $2,
+				     $point_sample_cutoff);
+	    }
+	    else {
+		$stats_bogus_samples++;
+	    }
 	}
     }
 
@@ -888,13 +900,14 @@ sub normalize_val {
 sub get_point_sample_cmd {
     my $x = shift;
     my $y = shift;
+    my $cutoff = shift;
 
     if ($usezbox == 0) {
 	return sprintf('pointcycle_ab_delta(%d, %s, [%.08f, %.08f, 1]~, ' .
-		       '%d, %d, %d)',
+		       '%d, %d, %d, %d)',
 		       $param_n, $param_r_txt,
 		       $x, $y, $aturn, $bturn,
-		       $point_sample_cutoff);
+		       $cutoff, $skip_after_sample_failure);
     }
     else {
 	#return sprintf('pointcycleorderabfastzbox' .
@@ -906,16 +919,31 @@ sub get_point_sample_cmd {
 }
 
 
-#open(my $outsamp, '>', $ARGV[2]) or die 'Unable to open ', $ARGV[2], ' for ',
-#    'writing: ', $!, ' ', $?, "\n";
+sub flush_work_queue {
+    my $work_queue_ref = shift;
 
+    my @failed_samples;
+    do_work($work_queue_ref, \@failed_samples);
+    @{$work_queue_ref} = ();
 
-#sub write_point_sample {
-#    my $x = shift;
-#    my $y = shift;
-#
-#    print $outsamp get_point_sample_cmd($x, $y), "\n";
-#}
+    if (scalar @failed_samples > 0) {
+	warn 'Hit ', scalar(@failed_samples),
+	' points above sample cutoff!', "\n";
+
+	my $rcount = 0;
+	my @retry_samples;
+	foreach my $redo_samp (@failed_samples) {
+	    last if ($rcount >= $failed_sample_retry_count);
+	    push @retry_samples, $redo_samp;
+	    $rcount++;
+	}
+
+	warn 'Retrying ', scalar(@retry_samples), ' with sample cutoff limit ',
+	$failed_sample_retry_cutoff, "\n";
+	my @junk;
+	do_work(\@retry_samples, \@junk);
+    }
+}
 
 
 sub do_image_pass {
@@ -946,8 +974,7 @@ sub do_image_pass {
 	for (my $iy = 0; $iy < $h; $iy++) {
 
 	    if (scalar @work_queue > $wq_batch_size) {
-		do_work(\@work_queue);
-		@work_queue = ();
+		flush_work_queue(\@work_queue);
 	    }
 
 	    my $scount = $igrid_scount[$ix][$iy];
@@ -987,7 +1014,8 @@ sub do_image_pass {
 
 			    push @work_queue, get_point_sample_cmd(
 				ixiy_to_point($ix, $iy,
-					      rand(1), rand(1)));
+					      rand(1), rand(1)),
+				$point_sample_cutoff);
 
 			}
 		    }
@@ -1005,7 +1033,8 @@ sub do_image_pass {
 
 			push @work_queue, get_point_sample_cmd(
 			    ixiy_to_point($ix, $iy,
-					  rand(1), rand(1)));
+					  rand(1), rand(1)),
+			    $point_sample_cutoff);
 
 			#}
 			#}
@@ -1083,7 +1112,8 @@ sub do_image_pass {
 
 				    push @work_queue, get_point_sample_cmd(
 					ixiy_to_point($ix, $iy,
-						      rand(1), rand(1)));
+						      rand(1), rand(1)),
+					$point_sample_cutoff);
 
 				}
 			    }
@@ -1156,16 +1186,11 @@ sub do_image_pass {
 	}
     }
 
-
-
     if (scalar @work_queue > 0) {
-	do_work(\@work_queue);
-	@work_queue = ();
+	flush_work_queue(\@work_queue);
     }
 
-    #
-
-
+    # ==
     open(my $outimg, '>', $IMG_NAME) or
 	die 'Unable to open ', $IMG_NAME, ' for writing: ', $!, ' ', $?, "\n";
 
@@ -1197,6 +1222,7 @@ sub do_image_pass {
 
 sub do_work {
     my $wq_ref = shift;
+    my $failed_points_ref = shift;
 
     try_save();
 
@@ -1252,7 +1278,7 @@ sub do_work {
 
 	foreach my $P_NAME (keys %pnames) {
 	    if (-e $P_NAME) {
-		read_points_file($P_NAME);
+		read_points_file($P_NAME, $failed_points_ref);
 		delete $pnames{$P_NAME};
 	    }
 	}
@@ -1270,7 +1296,8 @@ sub read_existing_points_files {
 			 $param_n, $param_r, $aturn, $bturn);
 
     foreach my $P_NAME (sort glob $P_GLOB) {
-	read_points_file($P_NAME);
+	my @junk;
+	read_points_file($P_NAME, \@junk);
     }
 }
 
