@@ -52,7 +52,7 @@ my $wwidth = $param_r - 1;
 my ($xmin, $xmax) = (-1.0 * $wwidth, 1.0 * $wwidth);
 my ($ymin, $ymax) = (-1.0 * $wheight, 1.0 * $wheight);
 
-my $h = 2048;
+my $h = 4096;
 my $w = int(($wwidth / $wheight) * $h);
 # ===
 
@@ -140,7 +140,7 @@ my $aa_log = 1; # Use the geometric mean rather than average
 #my $usezbox = 1;
 my $usezbox = 0;
 my $sym180 = 1;
-my $symmoves = 0; # Rotates points all the way around the disks
+my $symmoves = $samp_disk_points; # Rotates points around the disks
 #my $sym180 = 0;
 
 my $stats_pcount = 0;
@@ -464,19 +464,23 @@ sub is_border_pixel {
 
     # Check corner 1
     ($x, $y) = ixiy_to_point($ix, $iy, 0, 0);
-    $incount += 1 if (indisks($x, $y) == 1);
+    $incount += 1 if ((($samp_disk_points == 1) && (indisks($x, $y) == 1)) ||
+		      (($samp_disk_points == 0) && (inwedge($x, $y) == 1)));
 
     # Check corner 2
     ($x, $y) = ixiy_to_point($ix, $iy, 0, 1);
-    $incount += 1 if (indisks($x, $y) == 1);
+    $incount += 1 if ((($samp_disk_points == 1) && (indisks($x, $y) == 1)) ||
+		      (($samp_disk_points == 0) && (inwedge($x, $y) == 1)));
 
     # Check corner 3
     ($x, $y) = ixiy_to_point($ix, $iy, 1, 0);
-    $incount += 1 if (indisks($x, $y) == 1);
+    $incount += 1 if ((($samp_disk_points == 1) && (indisks($x, $y) == 1)) ||
+		      (($samp_disk_points == 0) && (inwedge($x, $y) == 1)));
 
     # Check corner 4
     ($x, $y) = ixiy_to_point($ix, $iy, 1, 1);
-    $incount += 1 if (indisks($x, $y) == 1);
+    $incount += 1 if ((($samp_disk_points == 1) && (indisks($x, $y) == 1)) ||
+		      (($samp_disk_points == 0) && (inwedge($x, $y) == 1)));
 
     if (($incount > 0) && ($incount < 4)) {
 	return 1;
@@ -502,7 +506,10 @@ sub border_blend_amount {
     my $incount = 0;
     for (my $i = 0; $i < $samplecount; $i++) {
 	($x, $y) = ixiy_to_point($ix, $iy, rand(), rand());
-	$incount += 1 if (indisks($x, $y) == 1);
+	$incount += 1 if ((($samp_disk_points == 1) &&
+			   (indisks($x, $y) == 1)) ||
+			  (($samp_disk_points == 0) &&
+			   (inwedge($x, $y) == 1)));
     }
 
     return (($incount * 1.0) / ($samplecount * 1.0));
