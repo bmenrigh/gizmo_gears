@@ -14,13 +14,13 @@ my $children = 0;
 
 my $PI = 3.14159265358979323846264;
 
-my $param_n = 5;
+my $param_n = 12;
 #my $param_r = sqrt((7 + sqrt(5)) / 2);
-my $param_r = sqrt((7 + sqrt(5)) / 2);
+my $param_r = sqrt(2);
 #my $param_r_txt = 'sqrt((7 + sqrt(5)) / 2)';
-my $param_r_txt = 'sqrt((7 + sqrt(5)) / 2)';
+my $param_r_txt = 'sqrt(2)';
 
-my $aturn = 4;
+my $aturn = 11;
 my $bturn = 1;
 
 # Negative because turns for this puzzle are clockwise
@@ -52,7 +52,7 @@ my $wwidth = $param_r - 1;
 my ($xmin, $xmax) = (-1.0 * $wwidth, 1.0 * $wwidth);
 my ($ymin, $ymax) = (-1.0 * $wheight, 1.0 * $wheight);
 
-my $h = 512;
+my $h = 2048;
 my $w = int(($wwidth / $wheight) * $h);
 # ===
 
@@ -68,7 +68,7 @@ my $w = int(($wwidth / $wheight) * $h);
 my $ih = $h; # Actual image height accounting for legend
 
 my $delta_color = 1; # Are colors based on delta, not absolute order?
-my $smooth_delta = 0; # Should color be smooth across ratio of a/b near 1?
+my $smooth_delta = 1; # Should color be smooth across ratio of a/b near 1?
 my $border_color = 0; # Are colors based on border distance, not order?
 my $blend_border = 1; # Should border pixels get blended with black?
 my $add_color_legend = 1;
@@ -78,7 +78,7 @@ if ($add_color_legend == 1) {
     $ih = $h + $legend_pad + $legend_height;
 }
 
-my $normalize_color_histogram = 0;
+my $normalize_color_histogram = 1;
 my $histogram_steps = 1024;
 my @normalized_table = ((0) x ($histogram_steps + 1));
 
@@ -811,8 +811,8 @@ sub normalize_histogram_table {
 
 	    if ($igrid_scount[$ix][$iy] > 0) {
 
-		my $neigh_avg = neigh_avg_order($ix, $iy);
-		my $v = order_to_val($neigh_avg, $aaomin, $aaomax);
+		my $aao = aa_order_point($ix, $iy);
+		my $v = order_to_val($aao, $aaomin, $aaomax);
 
 		my $bucket = int(($v + $voffset) *
 				 (($histogram_steps - 1.0) / $vscale));
@@ -834,7 +834,15 @@ sub normalize_histogram_table {
 
     }
     else {
-	die 'Tried to normalize histogram with no samples!', "\n";
+	#die 'Tried to normalize histogram with no samples!', "\n";
+
+	# We'll just assume all buckets are equal
+	my $cur = -1.0 * $voffset;
+
+	for (my $i = 0; $i <= $histogram_steps; $i++) {
+	    $normalized_table[$i] = $cur;
+	    $cur += $vscale * ((1.0) / (($histogram_steps + 1.0) * 1.0));
+	}
     }
 }
 
