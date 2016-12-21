@@ -52,7 +52,7 @@ my $wwidth = $param_r - 1;
 my ($xmin, $xmax) = (-1.0 * $wwidth, 1.0 * $wwidth);
 my ($ymin, $ymax) = (-1.0 * $wheight, 1.0 * $wheight);
 
-my $h = 4096;
+my $h = 8192;
 my $w = int(($wwidth / $wheight) * $h);
 # ===
 
@@ -101,13 +101,13 @@ my $border_samples = 1024;
 my $samp_disk_points = 0;
 my $samp_only_border = 0;
 #my $missing_data_cutoff = 2 * 1000 * 1000; # Not used for delta A/B code
-my $max_point_sample_cutoff = 2 * 1024 * 1024;
+my $max_point_sample_cutoff = 128 * 1024 * 1024;
 my $start_point_sample_cutoff = 64 * 1024;
 my $min_wq_batch_size = 4 * $parallelism;
 my $start_wq_batch_size = 4096 * $parallelism;
 my $sample_round_factor = 2; # How much to change these limits each pass
 my $failed_sample_retry_count = 16 * $parallelism;
-my $failed_sample_retry_cutoff = 8 * 1024 * 1024;
+my $failed_sample_retry_cutoff = 64; # Factor over current sample cutoff
 my $skip_after_sample_failure = 16; # Stop sampling points after N failures
 
 my $point_sample_cutoff = $start_point_sample_cutoff;
@@ -708,7 +708,8 @@ sub read_points_file {
 		#warn 'Failing point:', $1, ', ', $2, "\n";
 		push @$failed_points_ref,
 		get_point_sample_cmd($1, $2,
-				     $point_sample_cutoff);
+				     ($failed_sample_retry_cutoff *
+				      $point_sample_cutoff));
 	    }
 	    else {
 		$stats_bogus_samples++;
@@ -946,7 +947,7 @@ sub flush_work_queue {
 	}
 
 	warn 'Retrying ', scalar(@retry_samples), ' with sample cutoff limit ',
-	$failed_sample_retry_cutoff, "\n";
+	($failed_sample_retry_cutoff * $point_sample_cutoff), "\n";
 	my @junk;
 	do_work(\@retry_samples, \@junk);
     }
