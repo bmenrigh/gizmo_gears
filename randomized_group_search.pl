@@ -22,7 +22,7 @@ my %points = ();
 
 
 print 'Read("orbit_description.gap");', "\n";
-for (my $i = 0; $i < 1000; $i++) {
+for (my $i = 0; $i < 10000; $i++) {
     random_puzzle();
     sample_random_points();
 }
@@ -51,7 +51,7 @@ sub random_puzzle {
 
 sub sample_random_points {
 
-    for (my $i = 0; $i < 100; $i++) {
+    for (my $i = 0; $i < 200; $i++) {
 	find_orbit(random_point());
     }
 }
@@ -106,10 +106,22 @@ sub find_orbit {
     #$pname =~ tr/.-/pn/;
     my $pname = 'point';
 
+    # Checking that each of these is a permutation shouldn't be needed
+    # but the point rounding that is done can mess up and merge close points
+    # into one which messes up the permutation
+    foreach my $grip (@griplist) {
+	print sprintf('if (IsPerm(%s) = true) then', $grip), "\n";
+    }
+
     print sprintf('g_%s := Group([%s]);;',
 		  $pname, join(', ', @griplist)), "\n";
 
     print sprintf('DescribeInterestingOrbits(g_%s);;', $pname), "\n";
+
+    # Close each IsPerm() if statement
+    foreach my $grip (@griplist) {
+	print 'fi;', "\n";
+    }
 
 }
 
