@@ -10,7 +10,7 @@ require 'random_rc4-16.pl';
 
 my $PI = 3.14159265358979323846264;
 
-my $ORBIT_MAX = 32;
+my $ORBIT_MAX = 60;
 
 
 my %grips = ();
@@ -33,12 +33,12 @@ sub random_puzzle {
     %grips = ();
 
     add_grip('A',
-	     3 + rand_range_short_mask(2, 0x0F),
+	     2 + rand_range_short_mask(10, 0x0F),
 	     1.0 + rand_decimal() * 4.0,
 	     -1, 0);
 
     add_grip('B',
-	     3 + rand_range_short_mask(2, 0x0F),
+	     2 + rand_range_short_mask(10, 0x0F),
 	     1.0 + rand_decimal() * 4.0,
 	     1, 0);
 
@@ -214,7 +214,11 @@ sub random_point {
 sub random_point_in_grip {
     my $grip = shift;
 
-    my $r = rand_decimal() * $grips{$grip}{'R'};
+    # If R is picked uniformly it will biase the points closer to the
+    # center of the circle because more area is covered by the same R
+    # further out.  Thanks to Landon Kryger for pointing this out
+
+    my $r = sqrt(rand_decimal() * ($grips{$grip}{'R'} ** 2.0));
     my $t = rand_decimal() * (2.0 * $PI);
 
     my $x = $grips{$grip}{'X'} + $r * cos($t);
