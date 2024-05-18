@@ -12,6 +12,8 @@ my $PI = 3.14159265358979323846264;
 
 my $ORBIT_MAX = 60;
 
+my @gripnames = ('A', 'B', 'C', 'D', 'E');
+
 
 my %grips = ();
 #add_grip('A', 3, 2.4, -1, 0);
@@ -22,7 +24,7 @@ my %points = ();
 
 
 print 'Read("orbit_description.gap");', "\n";
-for (my $i = 0; $i < 10000; $i++) {
+for (my $i = 0; $i < 50000; $i++) {
     random_puzzle();
     sample_random_points();
 }
@@ -33,18 +35,27 @@ sub random_puzzle {
     %grips = ();
 
     add_grip('A',
-	     2 + rand_range_short_mask(10, 0x0F),
-	     1.0 + rand_decimal() * 4.0,
+	     2 + rand_range_short_mask(5, 0x0F),
+	     1.0 + rand_decimal() * 7.0,
 	     -1, 0);
 
     add_grip('B',
-	     2 + rand_range_short_mask(10, 0x0F),
-	     1.0 + rand_decimal() * 4.0,
+	     2 + rand_range_short_mask(5, 0x0F),
+	     1.0 + rand_decimal() * 7.0,
 	     1, 0);
 
-    print sprintf('Print("N1=%d; R1=%0.9f; N2=%d, R2=%.09f\n");',
-		  $grips{'A'}{'N'}, $grips{'A'}{'R'},
-		  $grips{'B'}{'N'}, $grips{'B'}{'R'}), "\n";
+    #add_grip('C',
+	#     2 + rand_range_short_mask(10, 0x0F),
+	 #    1.0 + rand_decimal() * 4.0,
+	  #   0, sqrt(3));
+
+    print 'Print("== New Puzzle ===\n");', "\n";
+    foreach my $grip (sort keys %grips) {
+	print sprintf('Print("Grip %s: N=%d; R=%0.9f; X=%.09f; Y=%.09f\n");',
+		      $grip,
+		      $grips{$grip}{'N'}, $grips{$grip}{'R'},
+		      $grips{$grip}{'X'}, $grips{$grip}{'Y'}), "\n";
+    }
 
 }
 

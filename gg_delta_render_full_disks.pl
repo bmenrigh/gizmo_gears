@@ -14,13 +14,13 @@ my $children = 0;
 
 my $PI = 3.14159265358979323846264;
 
-my $param_n = 12;
+my $param_n = 9;
 #my $param_r = sqrt((7 + sqrt(5)) / 2);
-my $param_r = sqrt(2);
+my $param_r = 1.4084;
 #my $param_r_txt = 'sqrt((7 + sqrt(5)) / 2)';
-my $param_r_txt = 'sqrt(2)';
+my $param_r_txt = '1.4084';
 
-my $aturn = 11;
+my $aturn = 8;
 my $bturn = 1;
 
 # Negative because turns for this puzzle are clockwise
@@ -35,7 +35,7 @@ my $sinbtheta = sin($btheta);
 
 
 # === These settings work for showing the disks
-#my $goalw = 512;
+#my $goalw = 2048;
 #my $scalef = ($goalw * 1.0) / ((2.0 * $param_r) + 2.0);
 
 #my $w = int(((2.0 * $param_r) + 2.0) * $scalef);
@@ -52,7 +52,7 @@ my $wwidth = $param_r - 1;
 my ($xmin, $xmax) = (-1.0 * $wwidth, 1.0 * $wwidth);
 my ($ymin, $ymax) = (-1.0 * $wheight, 1.0 * $wheight);
 
-my $h = 8192;
+my $h = 4096;
 my $w = int(($wwidth / $wheight) * $h);
 # ===
 
@@ -78,7 +78,7 @@ if ($add_color_legend == 1) {
     $ih = $h + $legend_pad + $legend_height;
 }
 
-my $normalize_color_histogram = 1;
+my $normalize_color_histogram = 0;
 my $histogram_steps = 1024;
 my @normalized_table = ((0) x ($histogram_steps + 1));
 
@@ -97,7 +97,7 @@ my $border_outerr = $param_r + (2.0 * $pradius);
 # Sampling controls
 my $aa_samp = 16;
 #my $aa_ord_cutoff = 200 * 1 * 1000;
-my $border_samples = 1024;
+my $border_samples = 256;
 my $samp_disk_points = 0;
 my $samp_only_border = 0;
 #my $missing_data_cutoff = 2 * 1000 * 1000; # Not used for delta A/B code
