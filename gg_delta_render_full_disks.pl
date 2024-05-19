@@ -89,7 +89,7 @@ my @normalized_table = ((0) x ($histogram_steps + 1));
 # height and width we must account for
 my $pwidth = (($xmax - $xmin) / (($w - 1.0) * 1.0));
 my $pheight = (($ymax - $ymin) / (($h - 1.0) * 1.0));
-my $pradius = sqrt(($pwidth ** 2.0) + ($pheight ** 2.0));
+my $pradius = sqrt((($pwidth / 2.0) ** 2.0) + (($pheight / 2.0) ** 2.0));
 
 my $border_innerr = $param_r - (2.0 * $pradius);
 my $border_outerr = $param_r + (2.0 * $pradius);
