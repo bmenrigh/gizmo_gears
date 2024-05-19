@@ -164,8 +164,8 @@ my @apoints_fromb_x;
 my @apoints_fromb_y;
 my $cent_min_r = 2.0 - $param_r;
 my $cent_max_r = dist((cos($ntheta / 2.0) * $param_r) - 1.0,
-		      sin($ntheta / 2.0) * $param_r,
-		      1, 0);
+                      sin($ntheta / 2.0) * $param_r,
+                      1, 0);
 
 $bpoints_froma_x[0] = 1.0;
 $bpoints_froma_y[0] = 0.0;
@@ -195,23 +195,23 @@ my $omax = 0;
 
 
 my $OG_NAME = sprintf('gg_delta_state_ogrid_d%d_b%d_n%d_r%.8f_a%db%d_%dx%d_' .
-		      '[%f,%f]_[%f,%f].ggs',
-		      $delta_color, $border_color,
-		      $param_n, $param_r, $aturn, $bturn, $w, $h,
-		      $xmin, $xmax, $ymin, $ymax);
+                      '[%f,%f]_[%f,%f].ggs',
+                      $delta_color, $border_color,
+                      $param_n, $param_r, $aturn, $bturn, $w, $h,
+                      $xmin, $xmax, $ymin, $ymax);
 
 my $SC_NAME = sprintf('gg_delta_state_scount_d%d_b%d_n%d_r%.8f_a%db%d_%dx%d_' .
-		      '[%f,%f]_[%f,%f].ggs',
-		      $delta_color, $border_color,
-		      $param_n, $param_r, $aturn, $bturn, $w, $h,
-		      $xmin, $xmax, $ymin, $ymax);
+                      '[%f,%f]_[%f,%f].ggs',
+                      $delta_color, $border_color,
+                      $param_n, $param_r, $aturn, $bturn, $w, $h,
+                      $xmin, $xmax, $ymin, $ymax);
 
 my $IMG_NAME = sprintf('gg_delta_img_fulld_d%d_b%d_n%d_r%.8f_a%db%d_%dx%d_' .
-		       '[%f,%f]_[%f,%f].png',
-		       $delta_color, $border_color,
-		       $param_n, $param_r,
-		       $aturn, $bturn, $w, $h,
-		       $xmin, $xmax, $ymin, $ymax);
+                       '[%f,%f]_[%f,%f].png',
+                       $delta_color, $border_color,
+                       $param_n, $param_r,
+                       $aturn, $bturn, $w, $h,
+                       $xmin, $xmax, $ymin, $ymax);
 
 
 # Used for point selection jitter
@@ -235,11 +235,11 @@ sub inwedge {
     my $y = shift;
 
     if ((dist($x, $y, -1, 0) < $param_r) &&
-	(dist($x, $y, 1, 0) < $param_r)) {
-	return 1;
+        (dist($x, $y, 1, 0) < $param_r)) {
+        return 1;
     }
     else {
-	return 0;
+        return 0;
     }
 }
 
@@ -249,11 +249,11 @@ sub indisks {
     my $y = shift;
 
     if ((dist($x, $y, -1, 0) < $param_r) ||
-	(dist($x, $y, 1, 0) < $param_r)) {
-	return 1;
+        (dist($x, $y, 1, 0) < $param_r)) {
+        return 1;
     }
     else {
-	return 0;
+        return 0;
     }
 }
 
@@ -266,29 +266,29 @@ sub incenter {
 
     # Check in A
     if ($adist < $param_r) {
-	return 1 if ($adist < $cent_min_r);
-	return 0 if ($adist > $cent_max_r);
+        return 1 if ($adist < $cent_min_r);
+        return 0 if ($adist > $cent_max_r);
 
-	for (my $i = 0; $i < $param_n; $i++) {
-	    return 0 if (dist($x, $y,
-			      $bpoints_froma_x[$i],
-			      $bpoints_froma_y[$i]) < $param_r);
-	}
-	return 1;
+        for (my $i = 0; $i < $param_n; $i++) {
+            return 0 if (dist($x, $y,
+                              $bpoints_froma_x[$i],
+                              $bpoints_froma_y[$i]) < $param_r);
+        }
+        return 1;
     }
     elsif ($bdist < $param_r) { # Check B
-	return 1 if ($bdist < $cent_min_r);
-	return 0 if ($bdist > $cent_max_r);
+        return 1 if ($bdist < $cent_min_r);
+        return 0 if ($bdist > $cent_max_r);
 
-	for (my $i = 0; $i < $param_n; $i++) {
-	    return 0 if (dist($x, $y,
-			      $apoints_fromb_x[$i],
-			      $apoints_fromb_y[$i]) < $param_r);
-	}
-	return 1;
+        for (my $i = 0; $i < $param_n; $i++) {
+            return 0 if (dist($x, $y,
+                              $apoints_fromb_x[$i],
+                              $apoints_fromb_y[$i]) < $param_r);
+        }
+        return 1;
     }
     else {
-	return 0;
+        return 0;
     }
 }
 
@@ -302,11 +302,11 @@ sub inborder {
     my $distb = dist($x, $y, 1, 0);
 
     if ((($dista >= $border_innerr) && ($dista <= $border_outerr)) ||
-	(($distb >= $border_innerr) && ($distb <= $border_outerr))) {
-	return 1;
+        (($distb >= $border_innerr) && ($distb <= $border_outerr))) {
+        return 1;
     }
     else {
-	return 0;
+        return 0;
     }
 }
 
@@ -317,62 +317,62 @@ sub val_to_rgb {
     # $v must be in the range [0, 1]
 
     if (($v < -1.0) || ($v > 1.0)) {
-	warn 'Bogus color value: ', $v, "\n";
-	return (0, 0, 0);
+        warn 'Bogus color value: ', $v, "\n";
+        return (0, 0, 0);
     }
 
     my ($r, $g, $b);
 
     if (($delta_color == 0) || ($smooth_delta == 0)) {
-	if ($v >= 0) {
-	    $v *= ($PI / 2.0);
+        if ($v >= 0) {
+            $v *= ($PI / 2.0);
 
-	    # Try to keep at least one color high valued and out of phase
-	    # with the others so that colors stay saturated
-	    $r = round(sin($v) * 255.0);
-	    $g = round((1 - sin($v * 2.0)) * 255.0);
-	    $b = round(cos($v) * 255.0);
-	}
-	else {
-	    $v *= ($PI / -2.0);
+            # Try to keep at least one color high valued and out of phase
+            # with the others so that colors stay saturated
+            $r = round(sin($v) * 255.0);
+            $g = round((1 - sin($v * 2.0)) * 255.0);
+            $b = round(cos($v) * 255.0);
+        }
+        else {
+            $v *= ($PI / -2.0);
 
-	    #$r = int(sin($v * $PI) * 255.0);
-	    #$g = int(((sin($v * ($PI * 2.0)) + 1.0) / 2) * 255.0);
-	    #$b = int(((cos($v * ($PI * 2.0)) + 1.0) / 2) * 255.0);
+            #$r = int(sin($v * $PI) * 255.0);
+            #$g = int(((sin($v * ($PI * 2.0)) + 1.0) / 2) * 255.0);
+            #$b = int(((cos($v * ($PI * 2.0)) + 1.0) / 2) * 255.0);
 
-	    $r = round((1 - sin($v)) * 255.0);
-	    $g = round(sin($v * 2.0) * 255.0);
-	    $b = round((1 - cos($v)) * 255.0);
-	}
+            $r = round((1 - sin($v)) * 255.0);
+            $g = round(sin($v * 2.0) * 255.0);
+            $b = round((1 - cos($v)) * 255.0);
+        }
     }
     else {
-	# This color function needs to be smooth about 1 (val near 0)
-	# To do this, the range [-1, 1] is mapped into [0, Pi/2] by splitting
-	# up [0, 1] into [Pi / 4, 0] (backwards)
-	# and [-1, 0] into [Pi / 4, Pi / 2]
-	if ($v >= 0) {
-	    $v = 1.0 - $v;
-	    $v *= ($PI / 4.0);
-	}
-	else {
-	    $v *= ($PI / -4.0);
-	    $v += ($PI / 4.0);
-	}
+        # This color function needs to be smooth about 1 (val near 0)
+        # To do this, the range [-1, 1] is mapped into [0, Pi/2] by splitting
+        # up [0, 1] into [Pi / 4, 0] (backwards)
+        # and [-1, 0] into [Pi / 4, Pi / 2]
+        if ($v >= 0) {
+            $v = 1.0 - $v;
+            $v *= ($PI / 4.0);
+        }
+        else {
+            $v *= ($PI / -4.0);
+            $v += ($PI / 4.0);
+        }
 
-	# The wavefactor is how many "bumps" to add to each channel
-	# The waveamp is how strong the wavefactor applies
-	my $wavefactor = 5;
-	my $waveamp = 0.1;
+        # The wavefactor is how many "bumps" to add to each channel
+        # The waveamp is how strong the wavefactor applies
+        my $wavefactor = 5;
+        my $waveamp = 0.1;
 
-	# Scale the wavefactor to fit in Pi / 2
-	$wavefactor = ($wavefactor * 4.0) + 1.0;
+        # Scale the wavefactor to fit in Pi / 2
+        $wavefactor = ($wavefactor * 4.0) + 1.0;
 
-	$r = round((sin($v) * (1.0 - $waveamp) +
-		    sin($v * $wavefactor) * $waveamp) * 255.0);
-	$g = round(((1 - sin($v * 2.0)) * (1.0 - $waveamp) +
-		    (1 - sin($v * 2.0 * $wavefactor)) * $waveamp) * 255.0);
-	$b = round((cos($v) * (1.0 - $waveamp) +
-		    cos($v * $wavefactor) * $waveamp) * 255.0);
+        $r = round((sin($v) * (1.0 - $waveamp) +
+                    sin($v * $wavefactor) * $waveamp) * 255.0);
+        $g = round(((1 - sin($v * 2.0)) * (1.0 - $waveamp) +
+                    (1 - sin($v * 2.0 * $wavefactor)) * $waveamp) * 255.0);
+        $b = round((cos($v) * (1.0 - $waveamp) +
+                    cos($v * $wavefactor) * $waveamp) * 255.0);
     }
 
     return ($r, $g, $b);
@@ -387,27 +387,27 @@ sub order_to_val {
     my $v;
 
     if ($delta_color == 0) {
-	#$v = atan2($o - $aaomin, 1.0) / atan2($aaomax - $aaomin, 1.0);
+        #$v = atan2($o - $aaomin, 1.0) / atan2($aaomax - $aaomin, 1.0);
 
-	my $offset = 5;
+        my $offset = 5;
 
-	$v = (log(($o - $aaomin) + $offset) /
-	      log(($aaomax - $aaomin) + $offset))
+        $v = (log(($o - $aaomin) + $offset) /
+              log(($aaomax - $aaomin) + $offset))
     }
     else {
-	if ($o > 1) {
-	    my $op = $o;
-	    my $omaxp = $aaomax;
-	    #$v = (log(log($op) + 1) / log(log($omaxp) + 1));
-	    $v = atan2($op - 1.0, 1.0) / atan2($omaxp - 1.0, 1.0);
-	}
-	else {
-	    my $on = 1.0 / $o;
-	    my $omaxn = 1.0 / $aaomin;
-	    #$v = (log(log($on) + 1) / log(log($omaxn) + 1));
-	    $v = atan2($on - 1.0, 1.0) / atan2($omaxn - 1.0, 1.0);
-	    $v *= -1.0;
-	}
+        if ($o > 1) {
+            my $op = $o;
+            my $omaxp = $aaomax;
+            #$v = (log(log($op) + 1) / log(log($omaxp) + 1));
+            $v = atan2($op - 1.0, 1.0) / atan2($omaxp - 1.0, 1.0);
+        }
+        else {
+            my $on = 1.0 / $o;
+            my $omaxn = 1.0 / $aaomin;
+            #$v = (log(log($on) + 1) / log(log($omaxn) + 1));
+            $v = atan2($on - 1.0, 1.0) / atan2($omaxn - 1.0, 1.0);
+            $v *= -1.0;
+        }
     }
 
     # Due to rounding errors this can be a tiny bit larger than 1 which is
@@ -424,8 +424,8 @@ sub point_to_ixiy {
     my $y = shift;
 
     if (($x + ($pwidth / 2.0) < $xmin) || ($x - ($pwidth / 2.0) > $xmax) ||
-	($y + ($pheight / 2.0) < $ymin) || ($y - ($pheight / 2.0) > $ymax)) {
-	return (-1, -1);
+        ($y + ($pheight / 2.0) < $ymin) || ($y - ($pheight / 2.0) > $ymax)) {
+        return (-1, -1);
     }
 
     my $ix = int((($x - $xmin) / $pwidth) + 0.5);
@@ -442,8 +442,8 @@ sub ixiy_to_point {
     my $iyoff = shift;
 
     if (($ix < 0) || ($ix >= $w) ||
-	($iy < 0) || ($iy >= $h)) {
-	return (-1, -1);
+        ($iy < 0) || ($iy >= $h)) {
+        return (-1, -1);
     }
 
     my $x = (($pwidth * ($ix + $ixoff)) + $xmin) - ($pwidth / 2.0);
@@ -465,25 +465,25 @@ sub is_border_pixel {
     # Check corner 1
     ($x, $y) = ixiy_to_point($ix, $iy, 0, 0);
     $incount += 1 if ((($samp_disk_points == 1) && (indisks($x, $y) == 1)) ||
-		      (($samp_disk_points == 0) && (inwedge($x, $y) == 1)));
+                      (($samp_disk_points == 0) && (inwedge($x, $y) == 1)));
 
     # Check corner 2
     ($x, $y) = ixiy_to_point($ix, $iy, 0, 1);
     $incount += 1 if ((($samp_disk_points == 1) && (indisks($x, $y) == 1)) ||
-		      (($samp_disk_points == 0) && (inwedge($x, $y) == 1)));
+                      (($samp_disk_points == 0) && (inwedge($x, $y) == 1)));
 
     # Check corner 3
     ($x, $y) = ixiy_to_point($ix, $iy, 1, 0);
     $incount += 1 if ((($samp_disk_points == 1) && (indisks($x, $y) == 1)) ||
-		      (($samp_disk_points == 0) && (inwedge($x, $y) == 1)));
+                      (($samp_disk_points == 0) && (inwedge($x, $y) == 1)));
 
     # Check corner 4
     ($x, $y) = ixiy_to_point($ix, $iy, 1, 1);
     $incount += 1 if ((($samp_disk_points == 1) && (indisks($x, $y) == 1)) ||
-		      (($samp_disk_points == 0) && (inwedge($x, $y) == 1)));
+                      (($samp_disk_points == 0) && (inwedge($x, $y) == 1)));
 
     if (($incount > 0) && ($incount < 4)) {
-	return 1;
+        return 1;
     }
 
     return 0;
@@ -505,11 +505,11 @@ sub border_blend_amount {
 
     my $incount = 0;
     for (my $i = 0; $i < $samplecount; $i++) {
-	($x, $y) = ixiy_to_point($ix, $iy, rand(), rand());
-	$incount += 1 if ((($samp_disk_points == 1) &&
-			   (indisks($x, $y) == 1)) ||
-			  (($samp_disk_points == 0) &&
-			   (inwedge($x, $y) == 1)));
+        ($x, $y) = ixiy_to_point($ix, $iy, rand(), rand());
+        $incount += 1 if ((($samp_disk_points == 1) &&
+                           (indisks($x, $y) == 1)) ||
+                          (($samp_disk_points == 0) &&
+                           (inwedge($x, $y) == 1)));
     }
 
     return (($incount * 1.0) / ($samplecount * 1.0));
@@ -526,26 +526,26 @@ sub move_point {
 
     # If the point is in circle A
     if (dist($x, $y, -1, 0) < $param_r) {
-	# Shift the point over to be centered on the origin
-	$x = $x + 1.0;
+        # Shift the point over to be centered on the origin
+        $x = $x + 1.0;
 
-	my $nx = $x * $cosatheta - $y * $sinatheta;
-	my $ny = $x * $sinatheta + $y * $cosatheta;
+        my $nx = $x * $cosatheta - $y * $sinatheta;
+        my $ny = $x * $sinatheta + $y * $cosatheta;
 
-	$x = $nx - 1.0;
-	$y = $ny;
+        $x = $nx - 1.0;
+        $y = $ny;
     }
 
     # If the point is in circle B
     if (dist($x, $y, 1, 0) < $param_r) {
-	# Shift the point over to be centered on the origin
-	$x = $x - 1.0;
+        # Shift the point over to be centered on the origin
+        $x = $x - 1.0;
 
-	my $nx = $x * $cosbtheta - $y * $sinbtheta;
-	my $ny = $x * $sinbtheta + $y * $cosbtheta;
+        my $nx = $x * $cosbtheta - $y * $sinbtheta;
+        my $ny = $x * $sinbtheta + $y * $cosbtheta;
 
-	$x = $nx + 1.0;
-	$y = $ny;
+        $x = $nx + 1.0;
+        $y = $ny;
     }
 
     return ($x, $y);
@@ -558,12 +558,12 @@ sub aa_order_point {
 
     my $aa_order;
     if ($aa_log == 1) {
-	$aa_order = exp((1.0 * $igrid_order[$ix][$iy]) /
-			(1.0 * $igrid_scount[$ix][$iy]));
+        $aa_order = exp((1.0 * $igrid_order[$ix][$iy]) /
+                        (1.0 * $igrid_scount[$ix][$iy]));
     }
     else {
-	$aa_order = ((1.0 * $igrid_order[$ix][$iy]) /
-		     (1.0 * $igrid_scount[$ix][$iy]));
+        $aa_order = ((1.0 * $igrid_order[$ix][$iy]) /
+                     (1.0 * $igrid_scount[$ix][$iy]));
     }
 
     return $aa_order;
@@ -579,25 +579,25 @@ sub neigh_avg_order {
     my $nosum = 0;
 
     for (my $cix = $ix - 1; $cix <= $ix + 1; $cix++) {
-	next if (($cix < 0) || ($cix >= $w));
+        next if (($cix < 0) || ($cix >= $w));
 
-	for (my $ciy = $iy - 1; $ciy <= $iy + 1; $ciy++) {
-	    next if (($ciy < 0) || ($ciy >= $h));
+        for (my $ciy = $iy - 1; $ciy <= $iy + 1; $ciy++) {
+            next if (($ciy < 0) || ($ciy >= $h));
 
-	    next if (($cix == $ix) && ($ciy == $iy));
+            next if (($cix == $ix) && ($ciy == $iy));
 
-	    next if ($igrid_scount[$cix][$ciy] == 0);
+            next if ($igrid_scount[$cix][$ciy] == 0);
 
-	    $nosum += aa_order_point($cix, $ciy);
-	    $ncount++;
-	}
+            $nosum += aa_order_point($cix, $ciy);
+            $ncount++;
+        }
     }
 
     if ($ncount > 0) {
-	return (($nosum * 1.0) / ($ncount * 1.0));
+        return (($nosum * 1.0) / ($ncount * 1.0));
     }
     else {
-	return -1;
+        return -1;
     }
 }
 
@@ -609,118 +609,118 @@ sub read_points_file {
     warn 'Reading points from ', $fname, "\n";
 
     open(my $inpoints, '<', $fname) or die 'Unable to open ', $fname, ' for ',
-    'reading: ', $!, ' ', $?, "\n";
+        'reading: ', $!, ' ', $?, "\n";
 
     while (<$inpoints>) {
-	chomp;
+        chomp;
 
-	my $line = $_;
+        my $line = $_;
 
-	if ($line =~ m/^(-?\d+\.\d{4,16})\s(-?\d+\.\d{4,16})\s
+        if ($line =~ m/^(-?\d+\.\d{4,16})\s(-?\d+\.\d{4,16})\s
                        (\d+)\s(\d+)\s(\d+\.\d{4,16})$/x) {
-	    my ($px, $py, $ordera, $orderb, $toborder) = ($1, $2, $3, $4, $5);
+            my ($px, $py, $ordera, $orderb, $toborder) = ($1, $2, $3, $4, $5);
 
-	    next if ($ordera == 0);
-	    next if ($orderb == 0);
+            next if ($ordera == 0);
+            next if ($orderb == 0);
 
-	    my ($ordr, $mordr);
-	    if ($border_color == 0) {
-		if ($delta_color == 0) {
-		    $ordr = ($ordera * 1.0) + ($orderb * 1.0);
-		    $mordr = $ordr;
-		}
-		else {
-		    $ordr = ($ordera * 1.0) / ($orderb * 1.0);
-		    $mordr = ($orderb * 1.0) / ($ordera * 1.0);
-		}
-	    }
-	    else {
-		if ($delta_color == 1) {
-		    # TODO: make this actually work
-		    # It needs to somehow scale numbers very close
-		    # to zero to be very close to 1
-		    # and numbers not so close to 0 need to be close
-		    # to zero or huge depending on if aturn > bturn
+            my ($ordr, $mordr);
+            if ($border_color == 0) {
+                if ($delta_color == 0) {
+                    $ordr = ($ordera * 1.0) + ($orderb * 1.0);
+                    $mordr = $ordr;
+                }
+                else {
+                    $ordr = ($ordera * 1.0) / ($orderb * 1.0);
+                    $mordr = ($orderb * 1.0) / ($ordera * 1.0);
+                }
+            }
+            else {
+                if ($delta_color == 1) {
+                    # TODO: make this actually work
+                    # It needs to somehow scale numbers very close
+                    # to zero to be very close to 1
+                    # and numbers not so close to 0 need to be close
+                    # to zero or huge depending on if aturn > bturn
 
-		    # Scale proximity to large number
-		    my $recip = 1.0 + (1.0 / $toborder);
-		    if ($ordera > $orderb) {
-			$ordr = $recip;
-			$mordr = (1.0 / $ordr);
-		    }
-		    else {
-			$ordr = 1.0 / $recip;
-			$mordr = $recip;
-		    }
-		}
-		else {
-		    $ordr = (1.0 / $toborder);
-		    $mordr = $ordr;
-		}
-	    }
+                    # Scale proximity to large number
+                    my $recip = 1.0 + (1.0 / $toborder);
+                    if ($ordera > $orderb) {
+                        $ordr = $recip;
+                        $mordr = (1.0 / $ordr);
+                    }
+                    else {
+                        $ordr = 1.0 / $recip;
+                        $mordr = $recip;
+                    }
+                }
+                else {
+                    $ordr = (1.0 / $toborder);
+                    $mordr = $ordr;
+                }
+            }
 
-	    add_point($px, $py, $ordr);
+            add_point($px, $py, $ordr);
 
-	    if ($symmoves == 1) {
-		my $nx = $px;
-		my $ny = $py;
+            if ($symmoves == 1) {
+                my $nx = $px;
+                my $ny = $py;
 
-		for (my $i = 0; $i < (2 * $param_n); $i++) {
-		    ($nx, $ny) = move_point($nx, $ny);
+                for (my $i = 0; $i < (2 * $param_n); $i++) {
+                    ($nx, $ny) = move_point($nx, $ny);
 
-		    if (inwedge($nx, $ny) == 0) {
-			$stats_symmoves_scount++;
-			add_point($nx, $ny, $ordr);
-		    }
-		    else {
-			last;
-		    }
-		}
-	    }
+                    if (inwedge($nx, $ny) == 0) {
+                        $stats_symmoves_scount++;
+                        add_point($nx, $ny, $ordr);
+                    }
+                    else {
+                        last;
+                    }
+                }
+            }
 
 
-	    if ($sym180 == 1) {
-		$stats_sym180_scount++;
-		add_point($px * -1.0, $py * -1.0, $mordr);
+            if ($sym180 == 1) {
+                $stats_sym180_scount++;
+                add_point($px * -1.0, $py * -1.0, $mordr);
 
-		if ($symmoves == 1) {
-		    my $nx = $px * -1.0;
-		    my $ny = $py * -1.0;
+                if ($symmoves == 1) {
+                    my $nx = $px * -1.0;
+                    my $ny = $py * -1.0;
 
-		    for (my $i = 0; $i < (2 * $param_n); $i++) {
-			($nx, $ny) = move_point($nx, $ny);
+                    for (my $i = 0; $i < (2 * $param_n); $i++) {
+                        ($nx, $ny) = move_point($nx, $ny);
 
-			if (inwedge($nx, $ny) == 0) {
-			    $stats_symmoves_scount++;
-			    add_point($nx, $ny, $mordr);
-			}
-			else {
-			    last;
-			}
-		    }
-		}
+                        if (inwedge($nx, $ny) == 0) {
+                            $stats_symmoves_scount++;
+                            add_point($nx, $ny, $mordr);
+                        }
+                        else {
+                            last;
+                        }
+                    }
+                }
 
-	    }
+            }
 
-	} # End if line matches good point
-	else {
-	    if ($line =~ m/^#\s(-?\d+\.\d{4,16})\s(-?\d+\.\d{4,16})\sHIT\sLIMIT/) {
-		#warn 'Failing point:', $1, ', ', $2, "\n";
-		push @$failed_points_ref,
-		get_point_sample_cmd($1, $2,
-				     ($failed_sample_retry_cutoff *
-				      $point_sample_cutoff));
-	    }
-	    else {
-		$stats_bogus_samples++;
-	    }
-	}
+        } # End if line matches good point
+        else {
+            if ($line =~ m/^#\s(-?\d+\.\d{4,16})\s(-?\d+\.\d{4,16})\sHIT\sLIMIT/) {
+                #warn 'Failing point:', $1, ', ', $2, "\n";
+                push @$failed_points_ref,
+                    get_point_sample_cmd($1, $2,
+                                         ($failed_sample_retry_cutoff *
+                                          $point_sample_cutoff));
+            }
+            else {
+                $stats_bogus_samples++;
+            }
+        }
     }
 
     close($inpoints);
 
     move($fname, 'processed/' . $fname) or
-	die 'Unable to move ', $fname, ' ', $?, ' : ', $!, "\n";
+        die 'Unable to move ', $fname, ' ', $?, ' : ', $!, "\n";
 }
 
 
@@ -738,26 +738,26 @@ sub add_point {
     return if (($ix == -1) || ($iy == -1));
 
     if (($ix < 0) || ($ix >= $w) ||
-	($iy < 0) || ($iy >= $h)) {
-	$stats_bogus_samples++;
-	#warn 'Got bogus pixel coords: ', $ix, ' ', $iy, "\n";
-	return;
+        ($iy < 0) || ($iy >= $h)) {
+        $stats_bogus_samples++;
+        #warn 'Got bogus pixel coords: ', $ix, ' ', $iy, "\n";
+        return;
     }
 
     if ($order > $omax) {
-	$omax = $order;
+        $omax = $order;
     }
     if ($order < $omin) {
-	$omin = $order;
+        $omin = $order;
     }
 
     $stats_usable_scount++;
 
     if ($aa_log == 1) {
-	$igrid_order[$ix][$iy] += log($order * 1.0);
+        $igrid_order[$ix][$iy] += log($order * 1.0);
     }
     else {
-	$igrid_order[$ix][$iy] += $order * 1.0;
+        $igrid_order[$ix][$iy] += $order * 1.0;
     }
     $igrid_scount[$ix][$iy] += 1;
 
@@ -776,31 +776,31 @@ sub find_order_min_max {
     my $aaomax = 0;
 
     for (my $ix = 0; $ix < $w; $ix++) {
-	for (my $iy = 0; $iy < $h; $iy++) {
+        for (my $iy = 0; $iy < $h; $iy++) {
 
-	    if ($igrid_scount[$ix][$iy] > 0) {
+            if ($igrid_scount[$ix][$iy] > 0) {
 
-		my $aao = aa_order_point($ix, $iy);
+                my $aao = aa_order_point($ix, $iy);
 
-		if ($aao > $aaomax) {
-		    $aaomax = $aao;
-		}
-		if ($aao < $aaomin) {
-		    $aaomin = $aao;
-		}
-	    }
-	}
+                if ($aao > $aaomax) {
+                    $aaomax = $aao;
+                }
+                if ($aao < $aaomin) {
+                    $aaomin = $aao;
+                }
+            }
+        }
     }
 
     if ($delta_color == 1) {
-	# Due to divide-by-zero issues with atan2 these need to be
-	# less than or greater than 1.0
-	if ($aaomin >= 1) {
-	    $aaomin = 0.9999999;
-	}
-	if ($aaomax <= 1) {
-	    $aaomax = 1.0000001;
-	}
+        # Due to divide-by-zero issues with atan2 these need to be
+        # less than or greater than 1.0
+        if ($aaomin >= 1) {
+            $aaomin = 0.9999999;
+        }
+        if ($aaomax <= 1) {
+            $aaomax = 1.0000001;
+        }
     }
 
     return ($aaomin, $aaomax);
@@ -817,52 +817,52 @@ sub normalize_histogram_table {
     my $voffset;
 
     if ($delta_color == 1) {
-	$vscale = 2.0;
-	$voffset = 1.0;
+        $vscale = 2.0;
+        $voffset = 1.0;
     }
     else {
-	$vscale = 1.0;
-	$voffset = 0.0;
+        $vscale = 1.0;
+        $voffset = 0.0;
     }
 
     my $scount = 0;
     for (my $ix = 0; $ix < $w; $ix++) {
-	for (my $iy = 0; $iy < $h; $iy++) {
+        for (my $iy = 0; $iy < $h; $iy++) {
 
-	    if ($igrid_scount[$ix][$iy] > 0) {
+            if ($igrid_scount[$ix][$iy] > 0) {
 
-		my $aao = aa_order_point($ix, $iy);
-		my $v = order_to_val($aao, $aaomin, $aaomax);
+                my $aao = aa_order_point($ix, $iy);
+                my $v = order_to_val($aao, $aaomin, $aaomax);
 
-		my $bucket = int(($v + $voffset) *
-				 (($histogram_steps - 1.0) / $vscale));
+                my $bucket = int(($v + $voffset) *
+                                 (($histogram_steps - 1.0) / $vscale));
 
-		$histogram[$bucket]++;
+                $histogram[$bucket]++;
 
-		$scount++;
-	    }
-	}
+                $scount++;
+            }
+        }
     }
 
     if ($scount > 0) {
-	my $cur = -1.0 * $voffset;
+        my $cur = -1.0 * $voffset;
 
-	for (my $i = 0; $i <= $histogram_steps; $i++) {
-	    $normalized_table[$i] = $cur;
-	    $cur += $vscale * (($histogram[$i] * 1.0) / ($scount * 1.0));
-	}
+        for (my $i = 0; $i <= $histogram_steps; $i++) {
+            $normalized_table[$i] = $cur;
+            $cur += $vscale * (($histogram[$i] * 1.0) / ($scount * 1.0));
+        }
 
     }
     else {
-	#die 'Tried to normalize histogram with no samples!', "\n";
+        #die 'Tried to normalize histogram with no samples!', "\n";
 
-	# We'll just assume all buckets are equal
-	my $cur = -1.0 * $voffset;
+        # We'll just assume all buckets are equal
+        my $cur = -1.0 * $voffset;
 
-	for (my $i = 0; $i <= $histogram_steps; $i++) {
-	    $normalized_table[$i] = $cur;
-	    $cur += $vscale * ((1.0) / (($histogram_steps + 1.0) * 1.0));
-	}
+        for (my $i = 0; $i <= $histogram_steps; $i++) {
+            $normalized_table[$i] = $cur;
+            $cur += $vscale * ((1.0) / (($histogram_steps + 1.0) * 1.0));
+        }
     }
 }
 
@@ -874,12 +874,12 @@ sub normalize_val {
     my $voffset;
 
     if ($delta_color == 1) {
-	$vscale = 2.0;
-	$voffset = 1.0;
+        $vscale = 2.0;
+        $voffset = 1.0;
     }
     else {
-	$vscale = 1.0;
-	$voffset = 0.0;
+        $vscale = 1.0;
+        $voffset = 0.0;
     }
     # Find what bucket this would be in if buckets were floats
     my $bucket_f = ($v + $voffset) * (($histogram_steps - 1.0) / $vscale);
@@ -895,10 +895,10 @@ sub normalize_val {
     my $nv = $bv + (($nbv - $bv) * ($bucket_f - int($bucket_f)));
 
     if ($nv > 1.0) {
-	$nv = 1.0;
+        $nv = 1.0;
     }
     if ($nv < -1.0) {
-	$nv = -1.0;
+        $nv = -1.0;
     }
 
     return $nv;
@@ -911,18 +911,18 @@ sub get_point_sample_cmd {
     my $cutoff = shift;
 
     if ($usezbox == 0) {
-	return sprintf('pointcycle_ab_delta(%d, %s, [%.08f, %.08f, 1]~, ' .
-		       '%d, %d, %d, %d)',
-		       $param_n, $param_r_txt,
-		       $x, $y, $aturn, $bturn,
-		       $cutoff, $skip_after_sample_failure);
+        return sprintf('pointcycle_ab_delta(%d, %s, [%.08f, %.08f, 1]~, ' .
+                       '%d, %d, %d, %d)',
+                       $param_n, $param_r_txt,
+                       $x, $y, $aturn, $bturn,
+                       $cutoff, $skip_after_sample_failure);
     }
     else {
-	#return sprintf('pointcycleorderabfastzbox' .
-	#	       '([%.08f, %.08f, 1]~, %d, %d, %d)',
-	#	       $x, $y, $aturn, $bturn,
-	#	       $point_sample_cutoff);
-	die 'Zbox currently unimplemented!', "\n";
+        #return sprintf('pointcycleorderabfastzbox' .
+        #	       '([%.08f, %.08f, 1]~, %d, %d, %d)',
+        #	       $x, $y, $aturn, $bturn,
+        #	       $point_sample_cutoff);
+        die 'Zbox currently unimplemented!', "\n";
     }
 }
 
@@ -935,21 +935,21 @@ sub flush_work_queue {
     @{$work_queue_ref} = ();
 
     if (scalar @failed_samples > 0) {
-	warn 'Hit ', scalar(@failed_samples),
-	' points above sample cutoff!', "\n";
+        warn 'Hit ', scalar(@failed_samples),
+            ' points above sample cutoff!', "\n";
 
-	my $rcount = 0;
-	my @retry_samples;
-	foreach my $redo_samp (@failed_samples) {
-	    last if ($rcount >= $failed_sample_retry_count);
-	    push @retry_samples, $redo_samp;
-	    $rcount++;
-	}
+        my $rcount = 0;
+        my @retry_samples;
+        foreach my $redo_samp (@failed_samples) {
+            last if ($rcount >= $failed_sample_retry_count);
+            push @retry_samples, $redo_samp;
+            $rcount++;
+        }
 
-	warn 'Retrying ', scalar(@retry_samples), ' with sample cutoff limit ',
-	($failed_sample_retry_cutoff * $point_sample_cutoff), "\n";
-	my @junk;
-	do_work(\@retry_samples, \@junk);
+        warn 'Retrying ', scalar(@retry_samples), ' with sample cutoff limit ',
+            ($failed_sample_retry_cutoff * $point_sample_cutoff), "\n";
+        my @junk;
+        do_work(\@retry_samples, \@junk);
     }
 }
 
@@ -961,7 +961,7 @@ sub do_image_pass {
     my ($aaomin, $aaomax) = find_order_min_max();
 
     if ($normalize_color_histogram == 1) {
-	normalize_histogram_table($aaomin, $aaomax);
+        normalize_histogram_table($aaomin, $aaomax);
     }
 
     $stats_passes++;
@@ -979,228 +979,228 @@ sub do_image_pass {
     warn 'Starting pass through pixel grid...', "\n";
 
     for (my $ix = 0; $ix < $w; $ix++) {
-	for (my $iy = 0; $iy < $h; $iy++) {
+        for (my $iy = 0; $iy < $h; $iy++) {
 
-	    if (scalar @work_queue > $wq_batch_size) {
-		flush_work_queue(\@work_queue);
-	    }
+            if (scalar @work_queue > $wq_batch_size) {
+                flush_work_queue(\@work_queue);
+            }
 
-	    my $scount = $igrid_scount[$ix][$iy];
+            my $scount = $igrid_scount[$ix][$iy];
 
-	    my ($cx, $cy) = ixiy_to_point($ix, $iy, 0.5, 0.5);
+            my ($cx, $cy) = ixiy_to_point($ix, $iy, 0.5, 0.5);
 
-	    my $pinwedge = inwedge($cx, $cy);
-	    my $pindisks = indisks($cx, $cy);
-	    my $pincenter = incenter($cx, $cy);
-	    my $pinborder = inborder($cx, $cy);
+            my $pinwedge = inwedge($cx, $cy);
+            my $pindisks = indisks($cx, $cy);
+            my $pincenter = incenter($cx, $cy);
+            my $pinborder = inborder($cx, $cy);
 
-	    my $isborderpixel = 0;
-	    if (($pinborder == 1) && ($blend_border == 1)) {
-		$isborderpixel = is_border_pixel($ix, $iy);
-	    }
+            my $isborderpixel = 0;
+            if (($pinborder == 1) && ($blend_border == 1)) {
+                $isborderpixel = is_border_pixel($ix, $iy);
+            }
 
-	    # Unsampled data
-	    if ($scount == 0) {
+            # Unsampled data
+            if ($scount == 0) {
 
-		# If the pixel is in the wedge
-		if (($pinwedge == 1) ||
-		    (($samp_disk_points == 1) &&
-		     ($pindisks == 1) &&
-		     ($pincenter == 0))) {
+                # If the pixel is in the wedge
+                if (($pinwedge == 1) ||
+                    (($samp_disk_points == 1) &&
+                     ($pindisks == 1) &&
+                     ($pincenter == 0))) {
 
-		    $stats_data_missing++;
+                    $stats_data_missing++;
 
-		    $msamp++;
+                    $msamp++;
 
-		    $img->setPixel($ix, ($ih - 1) - $iy, $white_idx);
+                    $img->setPixel($ix, ($ih - 1) - $iy, $white_idx);
 
-		    if ($pinborder == 1) {
-			#print $outsamp '/* Missing border data */', "\n";
-			for (my $i = 0; $i < $border_samples; $i++) {
-			    $stats_border_samples_needed++;
+                    if ($pinborder == 1) {
+                        #print $outsamp '/* Missing border data */', "\n";
+                        for (my $i = 0; $i < $border_samples; $i++) {
+                            $stats_border_samples_needed++;
 
 
-			    push @work_queue, get_point_sample_cmd(
-				ixiy_to_point($ix, $iy,
-					      rand(1), rand(1)),
-				$point_sample_cutoff);
+                            push @work_queue, get_point_sample_cmd(
+                                ixiy_to_point($ix, $iy,
+                                              rand(1), rand(1)),
+                                $point_sample_cutoff);
 
-			}
-		    }
-		    elsif ($samp_only_border == 0) {
+                        }
+                    }
+                    elsif ($samp_only_border == 0) {
 
-			# we could only sample pixels that have all
-			# their neigbors filled in or whoes surronding
-			# pixels have loweish order but neither of
-			# those make much sense for the deta A/B code.
+                        # we could only sample pixels that have all
+                        # their neigbors filled in or whoes surronding
+                        # pixels have loweish order but neither of
+                        # those make much sense for the deta A/B code.
 
-			#my $neigh_avg = neigh_avg_order($ix, $iy);
-			#if ($neigh_avg != -1) {
-			#if ($neigh_avg < $missing_data_cutoff) {
-			    #print $outsamp '/* Missing data sample */', "\n";
+                        #my $neigh_avg = neigh_avg_order($ix, $iy);
+                        #if ($neigh_avg != -1) {
+                        #if ($neigh_avg < $missing_data_cutoff) {
+                        #print $outsamp '/* Missing data sample */', "\n";
 
-			push @work_queue, get_point_sample_cmd(
-			    ixiy_to_point($ix, $iy,
-					  rand(1), rand(1)),
-			    $point_sample_cutoff);
+                        push @work_queue, get_point_sample_cmd(
+                            ixiy_to_point($ix, $iy,
+                                          rand(1), rand(1)),
+                            $point_sample_cutoff);
 
-			#}
-			#}
-		    }
-		}
-		elsif (($samp_disk_points == 1) && ($pincenter == 1)) {
-		    # A gets max
-		    if (dist($cx, $cy, -1.0, 0.0) < $param_r) {
-			$img->setPixel($ix, ($ih - 1) - $iy, $cmax_idx);
-		    }
-		    else {
-			$img->setPixel($ix, ($ih - 1) - $iy, $cmin_idx);
-		    }
-		}
-		else {
-		    # Not in the wedge (or disks or we aren't sampling
-		    # non-wedge points
+                        #}
+                        #}
+                    }
+                }
+                elsif (($samp_disk_points == 1) && ($pincenter == 1)) {
+                    # A gets max
+                    if (dist($cx, $cy, -1.0, 0.0) < $param_r) {
+                        $img->setPixel($ix, ($ih - 1) - $iy, $cmax_idx);
+                    }
+                    else {
+                        $img->setPixel($ix, ($ih - 1) - $iy, $cmin_idx);
+                    }
+                }
+                else {
+                    # Not in the wedge (or disks or we aren't sampling
+                    # non-wedge points
 
-		    $img->setPixel($ix, ($ih - 1) - $iy, $black_idx);
-		}
-	    } # end sample count is zero
-	    else { # samle count is not zero
-		my $aao = aa_order_point($ix, $iy);
+                    $img->setPixel($ix, ($ih - 1) - $iy, $black_idx);
+                }
+            } # end sample count is zero
+            else { # samle count is not zero
+                my $aao = aa_order_point($ix, $iy);
 
-		# Due to additional sample gathering the order may
-		# actually increase
-		if ($aao > $aaomax) {
-		    $aaomax = $aao;
-		}
-		# Same for the min
-		if ($aao < $aaomin) {
-		    $aaomin = $aao;
-		}
+                # Due to additional sample gathering the order may
+                # actually increase
+                if ($aao > $aaomax) {
+                    $aaomax = $aao;
+                }
+                # Same for the min
+                if ($aao < $aaomin) {
+                    $aaomin = $aao;
+                }
 
-		$stats_pcount++;
+                $stats_pcount++;
 
-		# See if we may want to re-sample this point for
-		# better AA
-		if (($pinwedge == 1) &&
-		    (($pinborder == 1) || ($samp_only_border == 0))){
-		    #if ($aao < $aa_ord_cutoff) { # doesnt make sense for delta
-		    if ($scount < $aa_samp) {
-			my $neigh_avg = neigh_avg_order($ix, $iy);
+                # See if we may want to re-sample this point for
+                # better AA
+                if (($pinwedge == 1) &&
+                    (($pinborder == 1) || ($samp_only_border == 0))){
+                    #if ($aao < $aa_ord_cutoff) { # doesnt make sense for delta
+                    if ($scount < $aa_samp) {
+                        my $neigh_avg = neigh_avg_order($ix, $iy);
 
-			if ($neigh_avg != -1) {
+                        if ($neigh_avg != -1) {
 
-			    # It is possible that points collected
-			    # could have reduced the order of
-			    # neighboring pixels but we haven't
-			    # visited one of those pixels yet so we
-			    # still think the minimum order is too
-			    # large so we must check that the neighbor
-			    # average is greater than the min order
+                            # It is possible that points collected
+                            # could have reduced the order of
+                            # neighboring pixels but we haven't
+                            # visited one of those pixels yet so we
+                            # still think the minimum order is too
+                            # large so we must check that the neighbor
+                            # average is greater than the min order
 
-			    my $neigh_v = order_to_val($neigh_avg, $aaomin,
-						       $aaomax);
-			    my $aao_v = order_to_val($aao, $aaomin,
-						     $aaomax);
-			    if ($normalize_color_histogram == 1) {
-				$neigh_v = normalize_val($neigh_v);
-				$aao_v = normalize_val($aao_v);
-			    }
+                            my $neigh_v = order_to_val($neigh_avg, $aaomin,
+                                                       $aaomax);
+                            my $aao_v = order_to_val($aao, $aaomin,
+                                                     $aaomax);
+                            if ($normalize_color_histogram == 1) {
+                                $neigh_v = normalize_val($neigh_v);
+                                $aao_v = normalize_val($aao_v);
+                            }
 
-			    if (($neigh_avg < $aaomin) ||
-				(abs($neigh_v - $aao_v) >
-				 (1.0 / 255.0))) {
+                            if (($neigh_avg < $aaomin) ||
+                                (abs($neigh_v - $aao_v) >
+                                 (1.0 / 255.0))) {
 
-				$stats_aa_pixels_needed++;
+                                $stats_aa_pixels_needed++;
 
-				$asamp++;
+                                $asamp++;
 
-				#print $outsamp '/* AA re-sample */', "\n";
-				for (my $i = $scount; $i < $aa_samp; $i++) {
-				    $stats_aa_samples_needed++;
+                                #print $outsamp '/* AA re-sample */', "\n";
+                                for (my $i = $scount; $i < $aa_samp; $i++) {
+                                    $stats_aa_samples_needed++;
 
-				    push @work_queue, get_point_sample_cmd(
-					ixiy_to_point($ix, $iy,
-						      rand(1), rand(1)),
-					$point_sample_cutoff);
+                                    push @work_queue, get_point_sample_cmd(
+                                        ixiy_to_point($ix, $iy,
+                                                      rand(1), rand(1)),
+                                        $point_sample_cutoff);
 
-				}
-			    }
-			}
-		    }
-		}
-		#warn 'Got aa order: ', $aa_order, "\n";
+                                }
+                            }
+                        }
+                    }
+                }
+                #warn 'Got aa order: ', $aa_order, "\n";
 
-		my $aao_v = order_to_val($aao, $aaomin,
-					 $aaomax);
-		if ($normalize_color_histogram == 1) {
-		    $aao_v = normalize_val($aao_v);
-		}
+                my $aao_v = order_to_val($aao, $aaomin,
+                                         $aaomax);
+                if ($normalize_color_histogram == 1) {
+                    $aao_v = normalize_val($aao_v);
+                }
 
-		my @c = val_to_rgb($aao_v);
+                my @c = val_to_rgb($aao_v);
 
-		# If this is a border pixel we should blend with black
-		if (($blend_border == 1) &&
-		    ($pinborder == 1) &&
-		    ($isborderpixel == 1)) {
+                # If this is a border pixel we should blend with black
+                if (($blend_border == 1) &&
+                    ($pinborder == 1) &&
+                    ($isborderpixel == 1)) {
 
-		    my $blend_v = border_blend_amount($ix, $iy);
+                    my $blend_v = border_blend_amount($ix, $iy);
 
-		    $c[0] = round($c[0] * $blend_v);
-		    $c[1] = round($c[1] * $blend_v);
-		    $c[2] = round($c[2] * $blend_v);
-		}
+                    $c[0] = round($c[0] * $blend_v);
+                    $c[1] = round($c[1] * $blend_v);
+                    $c[2] = round($c[2] * $blend_v);
+                }
 
-		my $cidx = $img->colorAllocate(@c);
+                my $cidx = $img->colorAllocate(@c);
 
-		$img->setPixel($ix, ($ih - 1) - $iy, $cidx);
-	    }
+                $img->setPixel($ix, ($ih - 1) - $iy, $cidx);
+            }
 
-	} # End for IY
+        } # End for IY
     } # End for IX
 
     if ($add_color_legend == 1) {
-	for (my $ix = 0; $ix < $w; $ix++) {
-	    for (my $iy = $h; $iy < $h + $legend_pad; $iy++) {
-		$img->setPixel($ix, ($ih - 1) - $iy, $black_idx);
-	    }
-	}
-	if ($delta_color == 0) {
-	    for (my $ix = 0; $ix < $w; $ix++) {
-		for (my $iy = $h + $legend_pad; $iy < $ih; $iy++) {
-		    my $hv = ((1.0 / ($w - 1)) * $ix);
+        for (my $ix = 0; $ix < $w; $ix++) {
+            for (my $iy = $h; $iy < $h + $legend_pad; $iy++) {
+                $img->setPixel($ix, ($ih - 1) - $iy, $black_idx);
+            }
+        }
+        if ($delta_color == 0) {
+            for (my $ix = 0; $ix < $w; $ix++) {
+                for (my $iy = $h + $legend_pad; $iy < $ih; $iy++) {
+                    my $hv = ((1.0 / ($w - 1)) * $ix);
 
-		    if ($normalize_color_histogram == 1) {
-			$hv = normalize_val($hv);
-		    }
+                    if ($normalize_color_histogram == 1) {
+                        $hv = normalize_val($hv);
+                    }
 
-		    my $legend_idx = $cimg->colorAllocate(val_to_rgb($hv));
-		    $img->setPixel($ix, ($ih - 1) - $iy, $legend_idx);
-		}
-	    }
-	}
-	else {
-	    for (my $ix = 0; $ix < $w; $ix++) {
-		for (my $iy = $h + $legend_pad; $iy < $ih; $iy++) {
-		    my $hv = (((-2.0 / ($w - 1)) * $ix) + 1.0);
+                    my $legend_idx = $cimg->colorAllocate(val_to_rgb($hv));
+                    $img->setPixel($ix, ($ih - 1) - $iy, $legend_idx);
+                }
+            }
+        }
+        else {
+            for (my $ix = 0; $ix < $w; $ix++) {
+                for (my $iy = $h + $legend_pad; $iy < $ih; $iy++) {
+                    my $hv = (((-2.0 / ($w - 1)) * $ix) + 1.0);
 
-		    if ($normalize_color_histogram == 1) {
-			$hv = normalize_val($hv);
-		    }
+                    if ($normalize_color_histogram == 1) {
+                        $hv = normalize_val($hv);
+                    }
 
-		    my $legend_idx = $cimg->colorAllocate(val_to_rgb($hv));
-		    $img->setPixel($ix, ($ih - 1) - $iy, $legend_idx);
-		}
-	    }
-	}
+                    my $legend_idx = $cimg->colorAllocate(val_to_rgb($hv));
+                    $img->setPixel($ix, ($ih - 1) - $iy, $legend_idx);
+                }
+            }
+        }
     }
 
     if (scalar @work_queue > 0) {
-	flush_work_queue(\@work_queue);
+        flush_work_queue(\@work_queue);
     }
 
     # ==
     open(my $outimg, '>', $IMG_NAME) or
-	die 'Unable to open ', $IMG_NAME, ' for writing: ', $!, ' ', $?, "\n";
+        die 'Unable to open ', $IMG_NAME, ' for writing: ', $!, ' ', $?, "\n";
 
     print $outimg $img->png();
 
@@ -1242,58 +1242,58 @@ sub do_work {
 
     for (my $n = 0; $n < $parallelism; $n++) {
 
-	my $sesid = get_session_id();
+        my $sesid = get_session_id();
 
-	my $W_NAME = sprintf('gg_delta_samples_n%d_r%.8f_a%db%d_%s.gp',
-			     $param_n, $param_r, $aturn, $bturn, $sesid);
+        my $W_NAME = sprintf('gg_delta_samples_n%d_r%.8f_a%db%d_%s.gp',
+                             $param_n, $param_r, $aturn, $bturn, $sesid);
 
-	my $P_NAME = sprintf('gg_delta_points_n%d_r%.8f_a%db%d_%s.txt',
-			     $param_n, $param_r, $aturn, $bturn, $sesid);
+        my $P_NAME = sprintf('gg_delta_points_n%d_r%.8f_a%db%d_%s.txt',
+                             $param_n, $param_r, $aturn, $bturn, $sesid);
 
-	my $P_TEMP = sprintf('gg_delta_points_n%d_r%.8f_a%db%d_%s.temp',
-			     $param_n, $param_r, $aturn, $bturn, $sesid);
+        my $P_TEMP = sprintf('gg_delta_points_n%d_r%.8f_a%db%d_%s.temp',
+                             $param_n, $param_r, $aturn, $bturn, $sesid);
 
-	$pnames{$P_NAME} = 1;
+        $pnames{$P_NAME} = 1;
 
-	open(my $outsamp, '>', $W_NAME) or
-	    die 'Unable to open ', $W_NAME, ' for writing: ', $!, ' ', $?, "\n";
-	for (my $i = $n; $i < $wq_len; $i += $parallelism) {
-	    print $outsamp $wq_ref->[$i], "\n";
-	}
-	print $outsamp '\\q', "\n";
-	close($outsamp);
+        open(my $outsamp, '>', $W_NAME) or
+            die 'Unable to open ', $W_NAME, ' for writing: ', $!, ' ', $?, "\n";
+        for (my $i = $n; $i < $wq_len; $i += $parallelism) {
+            print $outsamp $wq_ref->[$i], "\n";
+        }
+        print $outsamp '\\q', "\n";
+        close($outsamp);
 
-	my $cmd = 'gp -q gg_gen_points_full_param.gp ' . $W_NAME .
-	    ' > ' . $P_TEMP . ' 2>/dev/null';
+        my $cmd = 'gp -q gg_gen_points_full_param.gp ' . $W_NAME .
+            ' > ' . $P_TEMP . ' 2>/dev/null';
 
-	if (fork() == 0) {
+        if (fork() == 0) {
 
-	    my $ret = `$cmd`;
+            my $ret = `$cmd`;
 
-	    unlink($W_NAME);
-	    move($P_TEMP, $P_NAME);
+            unlink($W_NAME);
+            move($P_TEMP, $P_NAME);
 
-	    exit(0);
-	}
-	else {
-	    $children++;
-	}
+            exit(0);
+        }
+        else {
+            $children++;
+        }
     }
 
     while ($children > 0) {
-	wait();
-	$children--;
+        wait();
+        $children--;
 
-	foreach my $P_NAME (keys %pnames) {
-	    if (-e $P_NAME) {
-		read_points_file($P_NAME, $failed_points_ref);
-		delete $pnames{$P_NAME};
-	    }
-	}
+        foreach my $P_NAME (keys %pnames) {
+            if (-e $P_NAME) {
+                read_points_file($P_NAME, $failed_points_ref);
+                delete $pnames{$P_NAME};
+            }
+        }
     }
 
     if (scalar keys %pnames > 0) {
-	warn 'Some points files seem to have been left over!', "\n";
+        warn 'Some points files seem to have been left over!', "\n";
     }
 }
 
@@ -1301,11 +1301,11 @@ sub do_work {
 sub read_existing_points_files {
 
     my $P_GLOB = sprintf('gg_delta_points_n%d_r%.8f_a%db%d_*.txt',
-			 $param_n, $param_r, $aturn, $bturn);
+                         $param_n, $param_r, $aturn, $bturn);
 
     foreach my $P_NAME (sort glob $P_GLOB) {
-	my @junk;
-	read_points_file($P_NAME, \@junk);
+        my @junk;
+        read_points_file($P_NAME, \@junk);
     }
 }
 
@@ -1315,21 +1315,21 @@ sub write_state_files {
     warn 'Starting to write state...', "\n";
 
     open(my $OGFH, '>', $OG_NAME) or
-	die 'Unable to open ', $OG_NAME, ' ', $?, ' : ', $!, "\n";
+        die 'Unable to open ', $OG_NAME, ' ', $?, ' : ', $!, "\n";
 
     open(my $SCFH, '>', $SC_NAME) or
-	die 'Unable to open ', $SC_NAME, ' ', $?, ' : ', $!, "\n";
+        die 'Unable to open ', $SC_NAME, ' ', $?, ' : ', $!, "\n";
 
 
     for (my $iy = 0; $iy < $h; $iy++) {
-	my @ogrow;
-	my @scrow;
-	for (my $ix = 0; $ix < $w; $ix++) {
-	    push @ogrow, sprintf('%.8f', $igrid_order[$ix][$iy]);
-	    push @scrow, $igrid_scount[$ix][$iy];
-	}
-	print $OGFH join(' ', @ogrow), "\n";
-	print $SCFH join(' ', @scrow), "\n";
+        my @ogrow;
+        my @scrow;
+        for (my $ix = 0; $ix < $w; $ix++) {
+            push @ogrow, sprintf('%.8f', $igrid_order[$ix][$iy]);
+            push @scrow, $igrid_scount[$ix][$iy];
+        }
+        print $OGFH join(' ', @ogrow), "\n";
+        print $SCFH join(' ', @scrow), "\n";
     }
 
     close($OGFH);
@@ -1342,76 +1342,76 @@ sub write_state_files {
 sub read_state_files {
 
     if ((-e $OG_NAME) &&
-	(-e $SC_NAME)) {
+        (-e $SC_NAME)) {
 
-	warn 'Reading state from files...', "\n";
+        warn 'Reading state from files...', "\n";
 
-	open(my $OGFH, '<', $OG_NAME) or
-	    die 'Unable to open ', $OG_NAME, ' ', $?, ' : ', $!, "\n";
+        open(my $OGFH, '<', $OG_NAME) or
+            die 'Unable to open ', $OG_NAME, ' ', $?, ' : ', $!, "\n";
 
-	open(my $SCFH, '<', $SC_NAME) or
-	    die 'Unable to open ', $SC_NAME, ' ', $?, ' : ', $!, "\n";
+        open(my $SCFH, '<', $SC_NAME) or
+            die 'Unable to open ', $SC_NAME, ' ', $?, ' : ', $!, "\n";
 
-	@igrid_order = ();
-	@igrid_scount = ();
-	for (my $i = 0; $i < $w; $i++) {
-	    my @orcol = ((0) x $h);
-	    my @sccol = ((0) x $h);
+        @igrid_order = ();
+        @igrid_scount = ();
+        for (my $i = 0; $i < $w; $i++) {
+            my @orcol = ((0) x $h);
+            my @sccol = ((0) x $h);
 
-	    push @igrid_order, [@orcol];
-	    push @igrid_scount, [@sccol];
-	}
+            push @igrid_order, [@orcol];
+            push @igrid_scount, [@sccol];
+        }
 
-	#my $scount = $igrid_scount[$ix][$iy];
+        #my $scount = $igrid_scount[$ix][$iy];
 
-	my $iy = 0;
-	while (<$OGFH>) {
-	    chomp;
+        my $iy = 0;
+        while (<$OGFH>) {
+            chomp;
 
-	    my $line = $_;
+            my $line = $_;
 
-	    next if ($line =~ m/^\s*#/);
+            next if ($line =~ m/^\s*#/);
 
-	    my @row = split(/\s+/, $line);
+            my @row = split(/\s+/, $line);
 
-	    for (my $ix = 0; $ix < $w; $ix++) {
-		$igrid_order[$ix][$iy] = $row[$ix] * 1.0;
-	    }
+            for (my $ix = 0; $ix < $w; $ix++) {
+                $igrid_order[$ix][$iy] = $row[$ix] * 1.0;
+            }
 
-	    $iy++;
-	}
+            $iy++;
+        }
 
-	$iy = 0;
-	while (<$SCFH>) {
-	    chomp;
+        $iy = 0;
+        while (<$SCFH>) {
+            chomp;
 
-	    my $line = $_;
+            my $line = $_;
 
-	    next if ($line =~ m/^\s*#/);
+            next if ($line =~ m/^\s*#/);
 
-	    my @row = split(/\s+/, $line);
+            my @row = split(/\s+/, $line);
 
-	    for (my $ix = 0; $ix < $w; $ix++) {
-		$igrid_scount[$ix][$iy] = int($row[$ix]);
-	    }
+            for (my $ix = 0; $ix < $w; $ix++) {
+                $igrid_scount[$ix][$iy] = int($row[$ix]);
+            }
 
-	    $iy++;
-	}
+            $iy++;
+        }
 
     }
     else {
 
-	warn 'Could not find state files, starting with empty state...', "\n";
+        warn 'Could not find state files, starting with empty state...', "\n";
 
-	@igrid_order = ();
-	@igrid_scount = ();
-	for (my $i = 0; $i < $w; $i++) {
-	    my @orcol = ((0) x $h);
-	    my @sccol = ((0) x $h);
+        @igrid_order = ();
+        @igrid_scount = ();
+        for (my $i = 0; $i < $w; $i++) {
+            my @orcol = ((0) x $h);
+            my @sccol = ((0) x $h);
 
-	    push @igrid_order, [@orcol];
-	    push @igrid_scount, [@sccol];
-	}
+            push @igrid_order, [@orcol];
+            push @igrid_scount, [@sccol];
+        }
     }
 }
 
@@ -1421,8 +1421,8 @@ sub try_save {
     my $curtime = time();
 
     if ($curtime - $lastsave >= $saverate) {
-	write_state_files();
-	$lastsave = $curtime;
+        write_state_files();
+        $lastsave = $curtime;
     }
 }
 
@@ -1430,7 +1430,7 @@ sub try_save {
 sub get_session_id {
 
     open(URANDOM, '<', '/dev/urandom') or
-	die 'Unable to open urandom: ', $?, "\n";
+        die 'Unable to open urandom: ', $?, "\n";
 
     my $rand;
     read(URANDOM, $rand, 16);
@@ -1447,55 +1447,55 @@ sub render_image {
 
     my $done = 0;
     if (($prev_msamp == 0) && ($prev_asamp == 0)) {
-	warn 'No work left to be done!', "\n";
-	$done = 1;
+        warn 'No work left to be done!', "\n";
+        $done = 1;
     }
 
     my $no_aa_progress = 0;
     while ($done == 0) {
 
-	# Adjust paramaters each round
-	$point_sample_cutoff = round($point_sample_cutoff *
-				     $sample_round_factor);
+        # Adjust paramaters each round
+        $point_sample_cutoff = round($point_sample_cutoff *
+                                     $sample_round_factor);
 
-	if ($point_sample_cutoff > $max_point_sample_cutoff) {
-	    $point_sample_cutoff = $max_point_sample_cutoff;
-	}
+        if ($point_sample_cutoff > $max_point_sample_cutoff) {
+            $point_sample_cutoff = $max_point_sample_cutoff;
+        }
 
-	$wq_batch_size = round($wq_batch_size /
-			       $sample_round_factor);
+        $wq_batch_size = round($wq_batch_size /
+                               $sample_round_factor);
 
-	if ($wq_batch_size < $min_wq_batch_size) {
-	    $wq_batch_size = $min_wq_batch_size;
-	}
+        if ($wq_batch_size < $min_wq_batch_size) {
+            $wq_batch_size = $min_wq_batch_size;
+        }
 
-	# Now do a pass with the new parameters
-	my ($msamp, $asamp) = do_image_pass();
+        # Now do a pass with the new parameters
+        my ($msamp, $asamp) = do_image_pass();
 
-	if (($msamp == 0) && ($asamp == 0)) {
-	    warn 'No work left to be done!', "\n";
-	    $done = 1;
-	    last;
-	}
+        if (($msamp == 0) && ($asamp == 0)) {
+            warn 'No work left to be done!', "\n";
+            $done = 1;
+            last;
+        }
 
-	if (($msamp > 0) && ($msamp >= $prev_msamp)) {
-	    warn 'No sampling progress made!', "\n";
-	    $done = 1;
-	    last;
-	}
+        if (($msamp > 0) && ($msamp >= $prev_msamp)) {
+            warn 'No sampling progress made!', "\n";
+            $done = 1;
+            last;
+        }
 
-	if (($msamp == 0) && ($asamp > ($prev_asamp / 2.0))) {
-	    #warn 'No anti-aliasing progress made!', "\n";
-	    $no_aa_progress++;
-	}
+        if (($msamp == 0) && ($asamp > ($prev_asamp / 2.0))) {
+            #warn 'No anti-aliasing progress made!', "\n";
+            $no_aa_progress++;
+        }
 
-	if ($no_aa_progress > 4) {
-	    warn 'No anti-aliasing progress being made!', "\n";
-	    $done = 1;
-	    last;
-	}
+        if ($no_aa_progress > 4) {
+            warn 'No anti-aliasing progress being made!', "\n";
+            $done = 1;
+            last;
+        }
 
-	($prev_msamp, $prev_asamp) = ($msamp, $asamp);
+        ($prev_msamp, $prev_asamp) = ($msamp, $asamp);
     }
 
 }
