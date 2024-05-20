@@ -11,9 +11,9 @@
 
 #include <png.h>
 
-#define ORD_LIMIT 150000000
+#define ORD_LIMIT 5000000
 #define NUM_THREADS 24
-
+#define LOG_SCALE 0x10000
 
 struct thread_ctx {
     pthread_t tid;
@@ -24,7 +24,7 @@ struct thread_ctx {
 
 struct samples {
     uint32_t count;
-    double order;
+    int64_t scaled_log_order;
     uint64_t ord_a, ord_b;
 };
 
@@ -88,52 +88,53 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
     png_bytep image_data = calloc(ctx->img_h * ctx->img_w * 3, sizeof(png_byte));
 
     /* Find min and max order */
-    /* double log_max_order = 0; */
-    /* double log_min_order = ORD_LIMIT; */
-    /* for (int y = 0; y < ctx->img_h; y++) { */
-    /*     for (int x = 0; x < ctx->img_w; x++) { */
-    /*         int o = y * ctx->img_w + x; */
-    /*         if (ctx->grid[o].count > 0) { */
-    /*             double log_avg_order = fabs((double)ctx->grid[o].order / (double)ctx->grid[o].count); */
-    /*             if (log_avg_order > log_max_order) { */
-    /*                 log_max_order = log_avg_order; */
-    /*             } */
-    /*             if (log_avg_order < log_min_order) { */
-    /*                 log_min_order = log_avg_order; */
-    /*             } */
-    /*         } */
-    /*     } */
-    /* } */
-
-    /* double max_order = exp(log_max_order); */
-    /* double min_order = exp(log_min_order); */
-    /* fprintf(stderr, "log min: %f; min: %f\n", log_min_order, min_order); */
-    /* fprintf(stderr, "log max: %f; max: %f\n", log_max_order, max_order); */
-
-    double max_order = 0;
-    double min_order = ORD_LIMIT;
+    double log_max_order = 0;
+    double log_min_order = ORD_LIMIT;
     for (int y = 0; y < ctx->img_h; y++) {
         for (int x = 0; x < ctx->img_w; x++) {
             int o = y * ctx->img_w + x;
             if (ctx->grid[o].count > 0) {
-
-                double order;
-                if (ctx->grid[o].ord_a >= ctx->grid[o].ord_b) {
-                    order = (double)ctx->grid[o].ord_a / (double)ctx->grid[o].ord_b;
-                } else {
-                    order = (double)ctx->grid[o].ord_b / (double)ctx->grid[o].ord_a;
+                double log_avg_order = fabs((double)ctx->grid[o].scaled_log_order /
+                                            ((double)ctx->grid[o].count * (double)LOG_SCALE));
+                if (log_avg_order > log_max_order) {
+                    log_max_order = log_avg_order;
                 }
-
-                double avg_order = order / (double)ctx->grid[o].count;
-                if (avg_order > max_order) {
-                    max_order = avg_order;
-                }
-                if (avg_order < min_order) {
-                    min_order = avg_order;
+                if (log_avg_order < log_min_order) {
+                    log_min_order = log_avg_order;
                 }
             }
         }
     }
+
+    double max_order = exp(log_max_order);
+    double min_order = exp(log_min_order);
+    fprintf(stderr, "log min: %f; min: %f\n", log_min_order, min_order);
+    fprintf(stderr, "log max: %f; max: %f\n", log_max_order, max_order);
+
+    /* double max_order = 0; */
+    /* double min_order = ORD_LIMIT; */
+    /* for (int y = 0; y < ctx->img_h; y++) { */
+    /*     for (int x = 0; x < ctx->img_w; x++) { */
+    /*         int o = y * ctx->img_w + x; */
+    /*         if (ctx->grid[o].count > 0) { */
+
+    /*             double order; */
+    /*             if (ctx->grid[o].ord_a >= ctx->grid[o].ord_b) { */
+    /*                 order = (double)ctx->grid[o].ord_a / (double)ctx->grid[o].ord_b; */
+    /*             } else { */
+    /*                 order = (double)ctx->grid[o].ord_b / (double)ctx->grid[o].ord_a; */
+    /*             } */
+
+    /*             double avg_order = order / (double)ctx->grid[o].count; */
+    /*             if (avg_order > max_order) { */
+    /*                 max_order = avg_order; */
+    /*             } */
+    /*             if (avg_order < min_order) { */
+    /*                 min_order = avg_order; */
+    /*             } */
+    /*         } */
+    /*     } */
+    /* } */
 
 
     /* color pixles scaled by max order */
@@ -143,15 +144,25 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
             if (ctx->grid[o].count > 0) {
                 int neg = 0;
 
-                double order;
-                if (ctx->grid[o].ord_a >= ctx->grid[o].ord_b) {
-                    order = (double)ctx->grid[o].ord_a / (double)ctx->grid[o].ord_b;
-                } else {
+                /* double order; */
+                /* if (ctx->grid[o].ord_a >= ctx->grid[o].ord_b) { */
+                /*     order = (double)ctx->grid[o].ord_a / (double)ctx->grid[o].ord_b; */
+                /* } else { */
+                /*     neg = 1; */
+                /*     order = (double)ctx->grid[o].ord_b / (double)ctx->grid[o].ord_a; */
+                /* } */
+
+                /* double avg_order = order / (double)ctx->grid[o].count; */
+
+                double log_avg_order = ((double)ctx->grid[o].scaled_log_order /
+                                        ((double)ctx->grid[o].count * (double)LOG_SCALE));
+
+                if (log_avg_order < 0) {
                     neg = 1;
-                    order = (double)ctx->grid[o].ord_b / (double)ctx->grid[o].ord_a;
+                    log_avg_order = fabs(log_avg_order);
                 }
 
-                double avg_order = order / (double)ctx->grid[o].count;
+                double avg_order = exp(log_avg_order);
 
                 double v = atan2(avg_order - min_order, 1.0) / atan2(max_order - min_order, 1.0);
 
@@ -439,6 +450,8 @@ void point_sample(struct render_ctx *ctx, __complex128 p, int32_t limit, uint8_t
         /*     exit(255); */
         /* } */
 
+        int64_t scaled_ord = (int64_t)round(ord * (double)LOG_SCALE);
+
         for (int y = 0; y < ctx->img_h; y++) {
             for (int x = 0; x < ctx->img_w; x++) {
                 int o = y * ctx->img_w + x;
@@ -446,7 +459,7 @@ void point_sample(struct render_ctx *ctx, __complex128 p, int32_t limit, uint8_t
                     __sync_add_and_fetch(&(ctx->grid[o].count), 1);
                     __sync_add_and_fetch(&(ctx->grid[o].ord_a), ord_a);
                     __sync_add_and_fetch(&(ctx->grid[o].ord_b), ord_b);
-
+                    __sync_add_and_fetch(&(ctx->grid[o].scaled_log_order), scaled_ord);
 
                     /*ctx->grid[o].order += ord;*/
                 }
@@ -455,6 +468,7 @@ void point_sample(struct render_ctx *ctx, __complex128 p, int32_t limit, uint8_t
                     __sync_add_and_fetch(&(ctx->grid[o].count), 1);
                     __sync_add_and_fetch(&(ctx->grid[o].ord_a), ord_b); /* a/b swapped */
                     __sync_add_and_fetch(&(ctx->grid[o].ord_b), ord_a);
+                    __sync_sub_and_fetch(&(ctx->grid[o].scaled_log_order), scaled_ord);
 
                     /*ctx->grid[o].order -= ord;*/
                 }
