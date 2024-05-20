@@ -6,15 +6,26 @@
 #include <math.h>
 #include <quadmath.h>
 #include <assert.h>
+#include <setjmp.h>
+#include <pthread.h>
 
 #include <png.h>
 
-#define ORD_LIMIT 50000000
+#define ORD_LIMIT 150000000
+#define NUM_THREADS 24
 
+
+struct thread_ctx {
+    pthread_t tid;
+    int tnum;
+    int num_threads;
+    struct render_ctx *ctx;
+};
 
 struct samples {
     uint32_t count;
     double order;
+    uint64_t ord_a, ord_b;
 };
 
 struct render_ctx {
@@ -26,6 +37,7 @@ struct render_ctx {
     __complex128 rot_a, rot_b;
     __float128 epsilon;
     struct samples *grid;
+    pthread_mutex_t *grid_mutex;
 };
 
 
@@ -76,28 +88,53 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
     png_bytep image_data = calloc(ctx->img_h * ctx->img_w * 3, sizeof(png_byte));
 
     /* Find min and max order */
-    double log_max_order = 0;
-    double log_min_order = ORD_LIMIT;
+    /* double log_max_order = 0; */
+    /* double log_min_order = ORD_LIMIT; */
+    /* for (int y = 0; y < ctx->img_h; y++) { */
+    /*     for (int x = 0; x < ctx->img_w; x++) { */
+    /*         int o = y * ctx->img_w + x; */
+    /*         if (ctx->grid[o].count > 0) { */
+    /*             double log_avg_order = fabs((double)ctx->grid[o].order / (double)ctx->grid[o].count); */
+    /*             if (log_avg_order > log_max_order) { */
+    /*                 log_max_order = log_avg_order; */
+    /*             } */
+    /*             if (log_avg_order < log_min_order) { */
+    /*                 log_min_order = log_avg_order; */
+    /*             } */
+    /*         } */
+    /*     } */
+    /* } */
+
+    /* double max_order = exp(log_max_order); */
+    /* double min_order = exp(log_min_order); */
+    /* fprintf(stderr, "log min: %f; min: %f\n", log_min_order, min_order); */
+    /* fprintf(stderr, "log max: %f; max: %f\n", log_max_order, max_order); */
+
+    double max_order = 0;
+    double min_order = ORD_LIMIT;
     for (int y = 0; y < ctx->img_h; y++) {
         for (int x = 0; x < ctx->img_w; x++) {
             int o = y * ctx->img_w + x;
             if (ctx->grid[o].count > 0) {
-                double log_avg_order = fabs((double)ctx->grid[o].order / (double)ctx->grid[o].count);
-                if (log_avg_order > log_max_order) {
-                    log_max_order = log_avg_order;
+
+                double order;
+                if (ctx->grid[o].ord_a >= ctx->grid[o].ord_b) {
+                    order = (double)ctx->grid[o].ord_a / (double)ctx->grid[o].ord_b;
+                } else {
+                    order = (double)ctx->grid[o].ord_b / (double)ctx->grid[o].ord_a;
                 }
-                if (log_avg_order < log_min_order) {
-                    log_min_order = log_avg_order;
+
+                double avg_order = order / (double)ctx->grid[o].count;
+                if (avg_order > max_order) {
+                    max_order = avg_order;
+                }
+                if (avg_order < min_order) {
+                    min_order = avg_order;
                 }
             }
         }
     }
 
-    double max_order = exp(log_max_order);
-    double min_order = exp(log_min_order);
-
-    fprintf(stderr, "log min: %f; min: %f\n", log_min_order, min_order);
-    fprintf(stderr, "log max: %f; max: %f\n", log_max_order, max_order);
 
     /* color pixles scaled by max order */
     for (int y = 0; y < ctx->img_h; y++) {
@@ -105,13 +142,16 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
             int o = y * ctx->img_w + x;
             if (ctx->grid[o].count > 0) {
                 int neg = 0;
-                double log_avg_order = (double)ctx->grid[o].order / (double)ctx->grid[o].count;
-                if (log_avg_order < 0) {
+
+                double order;
+                if (ctx->grid[o].ord_a >= ctx->grid[o].ord_b) {
+                    order = (double)ctx->grid[o].ord_a / (double)ctx->grid[o].ord_b;
+                } else {
                     neg = 1;
-                    log_avg_order = fabs(log_avg_order);
+                    order = (double)ctx->grid[o].ord_b / (double)ctx->grid[o].ord_a;
                 }
 
-                double avg_order = exp(log_avg_order);
+                double avg_order = order / (double)ctx->grid[o].count;
 
                 double v = atan2(avg_order - min_order, 1.0) / atan2(max_order - min_order, 1.0);
 
@@ -312,7 +352,7 @@ __complex128 turn_b(struct render_ctx *ctx, __complex128 p) {
 }
 
 
-double point_order(struct render_ctx *ctx, __complex128 p, int32_t limit, uint8_t *visited, uint8_t *visited_m) {
+double point_order(struct render_ctx *ctx, __complex128 p, uint32_t *ord_a, uint32_t *ord_b, int32_t limit, uint8_t *visited, uint8_t *visited_m) {
 
     if (point_in_puzzle(ctx, p) != 1) {
         return 0;
@@ -367,6 +407,10 @@ double point_order(struct render_ctx *ctx, __complex128 p, int32_t limit, uint8_
 
     /* delta order a/b stuff */
     if ((count_a > 0) && (count_b > 0)) {
+
+        *ord_a = count_a;
+        *ord_b = count_b;
+
         return (log((double)count_a) - log((double)count_b)); /* log(a/b) */
     } else {
         return NAN;
@@ -382,23 +426,47 @@ void point_sample(struct render_ctx *ctx, __complex128 p, int32_t limit, uint8_t
 
     memset(visited, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
     memset(visited_m, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
-    double ord = point_order(ctx, p, limit, visited, visited_m);
+
+    uint32_t ord_a = 0, ord_b = 0;
+    double ord = point_order(ctx, p, &ord_a, &ord_b, limit, visited, visited_m);
 
     if (isnan(ord) == 0) {
+
+        /* int err; */
+        /* err = pthread_mutex_lock(ctx->grid_mutex); */
+        /* if (err != 0) { */
+        /*     perror("Unable to lock grid mutex to update visited"); */
+        /*     exit(255); */
+        /* } */
+
         for (int y = 0; y < ctx->img_h; y++) {
             for (int x = 0; x < ctx->img_w; x++) {
                 int o = y * ctx->img_w + x;
                 if (visited[o] == 1) {
-                    ctx->grid[o].count += 1;
-                    ctx->grid[o].order += ord;
+                    __sync_add_and_fetch(&(ctx->grid[o].count), 1);
+                    __sync_add_and_fetch(&(ctx->grid[o].ord_a), ord_a);
+                    __sync_add_and_fetch(&(ctx->grid[o].ord_b), ord_b);
+
+
+                    /*ctx->grid[o].order += ord;*/
                 }
 
                 if (visited_m[o] == 1) {
-                    ctx->grid[o].count += 1;
-                    ctx->grid[o].order -= ord;
+                    __sync_add_and_fetch(&(ctx->grid[o].count), 1);
+                    __sync_add_and_fetch(&(ctx->grid[o].ord_a), ord_b); /* a/b swapped */
+                    __sync_add_and_fetch(&(ctx->grid[o].ord_b), ord_a);
+
+                    /*ctx->grid[o].order -= ord;*/
                 }
             }
         }
+
+        /* err = pthread_mutex_unlock(ctx->grid_mutex); */
+        /* if (err != 0) { */
+        /*     perror("Unable to unlock grid mutex after updating visited"); */
+        /*     exit(255); */
+        /* } */
+
     } else {
         /* Fill in failed pixels sampled with limit */
 
@@ -419,8 +487,14 @@ void xy_sample(struct render_ctx *ctx, int x, int y, uint32_t n, uint32_t m, int
 
 
     int o = y * ctx->img_w + x;
+
+
     for (uint32_t i = 0; i < n; i++) {
-        if (ctx->grid[o].count < m) {
+
+        uint32_t gcount = __sync_add_and_fetch(&(ctx->grid[o].count), 0);
+
+        if (gcount < m) {
+
             __complex128 p = point_from_xy_rand(ctx, x, y);
 
             point_sample(ctx, p, limit, visited, visited_m);
@@ -431,39 +505,46 @@ void xy_sample(struct render_ctx *ctx, int x, int y, uint32_t n, uint32_t m, int
 }
 
 
-int main (void) {
+void * image_sample_thread(void *targ) {
+
+    struct thread_ctx *tctx = (struct thread_ctx *)targ;
+    struct render_ctx *ctx = tctx->ctx;
+
+    uint8_t *visited = malloc(ctx->img_w * ctx->img_h * sizeof(uint8_t));
+    uint8_t *visited_m = malloc(ctx->img_w * ctx->img_h * sizeof(uint8_t));
+
+    fprintf(stderr, "== SAMPLING BORDER PIXELS ==\n");
+    for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
+
+        fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);
+
+        for (int x = 0; x < ctx->img_w; x++) {
+
+            if (xy_on_border(ctx, x, y) == 1) {
+                xy_sample(ctx, x, y, 64, 4, ORD_LIMIT, visited, visited_m);
+            }
+        }
+    }
+
+    fprintf(stderr, "== SAMPLING DISC PIXELS ==\n");
+    for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
+        fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);
+
+        for (int x = 0; x < ctx->img_w; x++) {
+
+            xy_sample(ctx, x, y, 64, 8, ORD_LIMIT, visited, visited_m);
+        }
+    }
 
 
-    struct render_ctx *ctx = calloc(1, sizeof(struct render_ctx));
-    ctx->n = 12;
-    ctx->r = sqrt(2.0);
-    ctx->epsilon = 1e-16Q;
+    free(visited);
+    free(visited_m);
 
-    double goalw = 10240;
-    double scalef = goalw / ((2.0 * ctx->r) + 2.0);
-    ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef);
-    ctx->img_h = (int)floor(2.0 * ctx->r * scalef);
-    ctx->xmin = -1.0 - ctx->r;
-    ctx->xmax = 1.0 + ctx->r;
-    ctx->ymin = -1.0 * ctx->r;
-    ctx->ymax = 1.0 * ctx->r;
-    ctx->pwidth = (ctx->xmax - ctx->xmin) / ((double)ctx->img_w - 1.0);
-    ctx->pheight = (ctx->ymax - ctx->ymin) / ((double)ctx->img_h - 1.0);
-    ctx->half_pwidth = ctx->pwidth / 2.0;
-    ctx->half_pheight = ctx->pheight / 2.0;
-    ctx->grid = calloc(ctx->img_w * ctx->img_h, sizeof(struct samples));
-    ctx->pradius = sqrt(pow(ctx->half_pwidth, 2.0) + pow(ctx->half_pheight, 2.0));
+    return NULL;
+}
 
-    __real__ ctx->rot_a = cosq(M_PIq * ((__float128)2 / (__float128)ctx->n));
-    __imag__ ctx->rot_a = sinq(M_PIq * ((__float128)2 / (__float128)ctx->n));
-    ctx->rot_b = conjq(ctx->rot_a);
 
-    fprintf(stderr, "Image size %dx%d\n", ctx->img_w, ctx->img_h);
-
-    fprintf(stderr, "Image box (%.5f, %.5f) to (%.5f, %.5f)\n",
-            ctx->xmin, ctx->ymin,
-            ctx->xmax, ctx->ymax);
-
+void test_xy_point(struct render_ctx *ctx) {
 
     /* Test point -> xy and xy -> point */
     int tx = 13, ty = 31;
@@ -479,46 +560,65 @@ int main (void) {
         }
     }
 
+}
 
-    /*__complex128 p;
-    __real__ p = -0.000001;
-    __imag__ p = -0.000001;*/
-    /*int x, y;
-    assert(point_to_xy(ctx, p, &x, &y) == 0);
-    fprintf(stderr, "(x, y): (%d, %d)\n", x, y);
-    __complex128 q = point_from_xy(ctx, x, y);
-    fprintf(stderr, "(x, y): (%.5f, %.5f)\n", (double)__real__ q, (double)__imag__ q);*/
 
-    uint8_t *visited = malloc(ctx->img_w * ctx->img_h * sizeof(uint8_t));
-    uint8_t *visited_m = malloc(ctx->img_w * ctx->img_h * sizeof(uint8_t));
+int main (void) {
 
-    fprintf(stderr, "== SAMPLING BORDER PIXELS ==\n");
-    for (int y = 0; y < ctx->img_h; y++) {
-        if (y % 10 == 0) {
-            fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);
-        }
-        for (int x = 0; x < ctx->img_w; x++) {
 
-            if (xy_on_border(ctx, x, y) == 1) {
-                xy_sample(ctx, x, y, 64, 4, ORD_LIMIT, visited, visited_m);
-            }
+    struct render_ctx *ctx = calloc(1, sizeof(struct render_ctx));
+    ctx->n = 12;
+    ctx->r = sqrt(2.0);
+    ctx->epsilon = 1e-16Q;
+
+    double goalw = 1024;
+    double scalef = goalw / ((2.0 * ctx->r) + 2.0);
+    ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef);
+    ctx->img_h = (int)floor(2.0 * ctx->r * scalef);
+    ctx->xmin = -1.0 - ctx->r;
+    ctx->xmax = 1.0 + ctx->r;
+    ctx->ymin = -1.0 * ctx->r;
+    ctx->ymax = 1.0 * ctx->r;
+    ctx->pwidth = (ctx->xmax - ctx->xmin) / ((double)ctx->img_w - 1.0);
+    ctx->pheight = (ctx->ymax - ctx->ymin) / ((double)ctx->img_h - 1.0);
+    ctx->half_pwidth = ctx->pwidth / 2.0;
+    ctx->half_pheight = ctx->pheight / 2.0;
+    ctx->pradius = sqrt(pow(ctx->half_pwidth, 2.0) + pow(ctx->half_pheight, 2.0));
+    ctx->grid = calloc(ctx->img_w * ctx->img_h, sizeof(struct samples));
+
+    pthread_mutex_t grid_mutex = PTHREAD_MUTEX_INITIALIZER;
+    ctx->grid_mutex = &(grid_mutex);
+
+    __real__ ctx->rot_a = cosq(M_PIq * ((__float128)2 / (__float128)ctx->n));
+    __imag__ ctx->rot_a = sinq(M_PIq * ((__float128)2 / (__float128)ctx->n));
+    ctx->rot_b = conjq(ctx->rot_a);
+
+    fprintf(stderr, "Image size %dx%d\n", ctx->img_w, ctx->img_h);
+
+    fprintf(stderr, "Image box (%.5f, %.5f) to (%.5f, %.5f)\n",
+            ctx->xmin, ctx->ymin,
+            ctx->xmax, ctx->ymax);
+
+    struct thread_ctx *tctxs = (struct thread_ctx *)calloc(NUM_THREADS, sizeof(struct thread_ctx));
+    for (int i = 0; i < NUM_THREADS; i++) {
+        tctxs[i].tnum = i;
+        tctxs[i].num_threads = NUM_THREADS;
+        tctxs[i].ctx = ctx;
+    }
+
+    int err;
+
+    for (int i = 0; i < NUM_THREADS; i++) {
+        err = pthread_create(&(tctxs[i].tid), NULL, image_sample_thread, &(tctxs[i]));
+        if (err != 0) {
+            perror("error creating stats thread");
+            exit(255);
         }
     }
 
-    fprintf(stderr, "== SAMPLING DISC PIXELS ==\n");
-    for (int y = 0; y < ctx->img_h; y++) {
-        if (y % 10 == 0) {
-            fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);
-        }
-        for (int x = 0; x < ctx->img_w; x++) {
-
-            xy_sample(ctx, x, y, 64, 8, ORD_LIMIT, visited, visited_m);
-        }
+    for (int i = 0; i < NUM_THREADS; i++) {
+        pthread_join(tctxs[i].tid, NULL);
     }
-
-
-    free(visited);
-    free(visited_m);
 
     ctx_to_png(ctx, "/tmp/test.png");
 
