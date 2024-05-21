@@ -25,11 +25,17 @@ struct thread_ctx {
 struct samples {
     uint32_t count;
     int64_t scaled_log_order;
-    uint64_t ord_a, ord_b;
+    /*uint64_t ord_a, ord_b;*/
+};
+
+struct visited_ctx {
+    uint32_t limit;
+    uint8_t *visited, *visited_m;
+    uint32_t ord_a, ord_b;
 };
 
 struct render_ctx {
-    int n;
+    uint32_t n;
     double r;
     int img_w, img_h;
     double xmin, xmax, ymin, ymax;
@@ -363,7 +369,7 @@ __complex128 turn_b(struct render_ctx *ctx, __complex128 p) {
 }
 
 
-double point_order(struct render_ctx *ctx, __complex128 p, uint32_t *ord_a, uint32_t *ord_b, int32_t limit, uint8_t *visited, uint8_t *visited_m) {
+double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *vctx) {
 
     if (point_in_puzzle(ctx, p) != 1) {
         return 0;
@@ -372,9 +378,9 @@ double point_order(struct render_ctx *ctx, __complex128 p, uint32_t *ord_a, uint
     int x, y;
     __complex128 op = p; /* Original p */
     uint8_t step = 0;
-    int32_t count = 0;
-    int32_t count_a = 0;
-    int32_t count_b = 0;
+    uint32_t count = 0;
+    uint32_t count_a = 0;
+    uint32_t count_b = 0;
     do {
         if (step == 0) {
             if (point_in_a(ctx, p) == 1) {
@@ -391,20 +397,20 @@ double point_order(struct render_ctx *ctx, __complex128 p, uint32_t *ord_a, uint
         if (step == 0) {
             /* Only track after a0123456789101112 is done */
             assert(point_to_xy(ctx, p, &x, &y) == 0);
-            visited[y * ctx->img_w + x] = 1;
+            vctx->visited[y * ctx->img_w + x] = 1;
 
             __complex128 p_m;
             __real__ p_m = -1.0Q * __real__ p;
             __imag__ p_m = -1.0Q * __imag__ p;
 
             assert(point_to_xy(ctx, p_m, &x, &y) == 0);
-            visited_m[y * ctx->img_w + x] = 1;
+            vctx->visited_m[y * ctx->img_w + x] = 1;
         }
 
         step ^= 1; /* toggle between a and b */
         count++;
 
-        if (count > limit) {
+        if (count > vctx->limit) {
             return NAN;
         }
 
@@ -419,8 +425,8 @@ double point_order(struct render_ctx *ctx, __complex128 p, uint32_t *ord_a, uint
     /* delta order a/b stuff */
     if ((count_a > 0) && (count_b > 0)) {
 
-        *ord_a = count_a;
-        *ord_b = count_b;
+        /* *ord_a = count_a; */
+        /* *ord_b = count_b; */
 
         return (log((double)count_a) - log((double)count_b)); /* log(a/b) */
     } else {
@@ -429,17 +435,16 @@ double point_order(struct render_ctx *ctx, __complex128 p, uint32_t *ord_a, uint
 }
 
 
-void point_sample(struct render_ctx *ctx, __complex128 p, int32_t limit, uint8_t *visited, uint8_t *visited_m) {
+void point_sample(struct render_ctx *ctx, __complex128 p, struct visited_ctx *vctx) {
 
     if (point_in_puzzle(ctx, p) != 1) {
         return;
     }
 
-    memset(visited, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
-    memset(visited_m, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
+    memset(vctx->visited, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
+    memset(vctx->visited_m, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
 
-    uint32_t ord_a = 0, ord_b = 0;
-    double ord = point_order(ctx, p, &ord_a, &ord_b, limit, visited, visited_m);
+    double ord = point_order(ctx, p, vctx);
 
     if (isnan(ord) == 0) {
 
@@ -455,19 +460,19 @@ void point_sample(struct render_ctx *ctx, __complex128 p, int32_t limit, uint8_t
         for (int y = 0; y < ctx->img_h; y++) {
             for (int x = 0; x < ctx->img_w; x++) {
                 int o = y * ctx->img_w + x;
-                if (visited[o] == 1) {
+                if (vctx->visited[o] == 1) {
                     __sync_add_and_fetch(&(ctx->grid[o].count), 1);
-                    __sync_add_and_fetch(&(ctx->grid[o].ord_a), ord_a);
-                    __sync_add_and_fetch(&(ctx->grid[o].ord_b), ord_b);
+                    /* __sync_add_and_fetch(&(ctx->grid[o].ord_a), ord_a); */
+                    /* __sync_add_and_fetch(&(ctx->grid[o].ord_b), ord_b); */
                     __sync_add_and_fetch(&(ctx->grid[o].scaled_log_order), scaled_ord);
 
                     /*ctx->grid[o].order += ord;*/
                 }
 
-                if (visited_m[o] == 1) {
+                if (vctx->visited_m[o] == 1) {
                     __sync_add_and_fetch(&(ctx->grid[o].count), 1);
-                    __sync_add_and_fetch(&(ctx->grid[o].ord_a), ord_b); /* a/b swapped */
-                    __sync_add_and_fetch(&(ctx->grid[o].ord_b), ord_a);
+                    /* __sync_add_and_fetch(&(ctx->grid[o].ord_a), ord_b); /\* a/b swapped *\/ */
+                    /* __sync_add_and_fetch(&(ctx->grid[o].ord_b), ord_a); */
                     __sync_sub_and_fetch(&(ctx->grid[o].scaled_log_order), scaled_ord);
 
                     /*ctx->grid[o].order -= ord;*/
@@ -497,7 +502,7 @@ void point_sample(struct render_ctx *ctx, __complex128 p, int32_t limit, uint8_t
 }
 
 
-void xy_sample(struct render_ctx *ctx, int x, int y, uint32_t n, uint32_t m, int32_t limit, uint8_t *visited, uint8_t *visited_m) {
+void xy_sample(struct render_ctx *ctx, int x, int y, uint32_t n, uint32_t m, struct visited_ctx *vctx) {
 
 
     int o = y * ctx->img_w + x;
@@ -511,7 +516,7 @@ void xy_sample(struct render_ctx *ctx, int x, int y, uint32_t n, uint32_t m, int
 
             __complex128 p = point_from_xy_rand(ctx, x, y);
 
-            point_sample(ctx, p, limit, visited, visited_m);
+            point_sample(ctx, p, vctx);
         } else {
             break;
         }
@@ -524,8 +529,11 @@ void * image_sample_thread(void *targ) {
     struct thread_ctx *tctx = (struct thread_ctx *)targ;
     struct render_ctx *ctx = tctx->ctx;
 
-    uint8_t *visited = malloc(ctx->img_w * ctx->img_h * sizeof(uint8_t));
-    uint8_t *visited_m = malloc(ctx->img_w * ctx->img_h * sizeof(uint8_t));
+    struct visited_ctx svctx;
+    struct visited_ctx *vctx = &svctx;
+
+    vctx->visited = malloc(ctx->img_w * ctx->img_h * sizeof(uint8_t));
+    vctx->visited_m = malloc(ctx->img_w * ctx->img_h * sizeof(uint8_t));
 
     fprintf(stderr, "== SAMPLING BORDER PIXELS ==\n");
     for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
@@ -535,7 +543,7 @@ void * image_sample_thread(void *targ) {
         for (int x = 0; x < ctx->img_w; x++) {
 
             if (xy_on_border(ctx, x, y) == 1) {
-                xy_sample(ctx, x, y, 64, 4, ORD_LIMIT, visited, visited_m);
+                xy_sample(ctx, x, y, 64, 4, vctx);
             }
         }
     }
@@ -546,13 +554,13 @@ void * image_sample_thread(void *targ) {
 
         for (int x = 0; x < ctx->img_w; x++) {
 
-            xy_sample(ctx, x, y, 64, 8, ORD_LIMIT, visited, visited_m);
+            xy_sample(ctx, x, y, 64, 8, vctx);
         }
     }
 
 
-    free(visited);
-    free(visited_m);
+    free(vctx->visited);
+    free(vctx->visited_m);
 
     return NULL;
 }
@@ -585,7 +593,7 @@ int main (void) {
     ctx->r = sqrt(2.0);
     ctx->epsilon = 1e-16Q;
 
-    double goalw = 1024;
+    double goalw = 256;
     double scalef = goalw / ((2.0 * ctx->r) + 2.0);
     ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef);
     ctx->img_h = (int)floor(2.0 * ctx->r * scalef);
