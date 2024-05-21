@@ -14,6 +14,7 @@
 #define ORD_LIMIT 5000000
 #define NUM_THREADS 24
 #define LOG_SCALE 0x10000
+#define GROW_VISITED 1024
 
 struct thread_ctx {
     pthread_t tid;
@@ -31,6 +32,8 @@ struct samples {
 struct visited_ctx {
     uint32_t limit;
     uint8_t *visited, *visited_m;
+    uint32_t *vx, *vy, *vx_m, *vy_m;
+    int32_t vsize, vused, vsize_m, vused_m;
     uint32_t ord_a, ord_b;
 };
 
@@ -369,13 +372,57 @@ __complex128 turn_b(struct render_ctx *ctx, __complex128 p) {
 }
 
 
+void add_visited_xy(struct render_ctx *ctx, struct visited_ctx *vctx, int x, int y, int x_m, int y_m) {
+
+    uint32_t o = y * ctx->img_w + x;
+    if (vctx->visited[o] == 0) {
+        vctx->visited[o] = 1;
+
+        /* grow x/y array */
+        if (vctx->vused >= (vctx->vsize - 1)) {
+            vctx->vx = realloc(vctx->vx, (vctx->vsize + GROW_VISITED) * sizeof(uint32_t));
+            assert(vctx->vx != NULL);
+
+            vctx->vy = realloc(vctx->vy, (vctx->vsize + GROW_VISITED) * sizeof(uint32_t));
+            assert(vctx->vy != NULL);
+
+            vctx->vsize += GROW_VISITED;
+        }
+
+        vctx->vx[vctx->vused] = x;
+        vctx->vy[vctx->vused] = y;
+        vctx->vused += 1;
+    }
+
+    uint32_t o_m = y_m * ctx->img_w + x_m;
+    if (vctx->visited_m[o_m] == 0) {
+        vctx->visited_m[o_m] = 1;
+
+        /* grow x/y array */
+        if (vctx->vused_m >= (vctx->vsize_m - 1)) {
+            vctx->vx_m = realloc(vctx->vx_m, (vctx->vsize_m + GROW_VISITED) * sizeof(uint32_t));
+            assert(vctx->vx_m != NULL);
+
+            vctx->vy_m = realloc(vctx->vy_m, (vctx->vsize_m + GROW_VISITED) * sizeof(uint32_t));
+            assert(vctx->vy_m != NULL);
+
+            vctx->vsize_m += GROW_VISITED;
+        }
+
+        vctx->vx_m[vctx->vused_m] = x_m;
+        vctx->vy_m[vctx->vused_m] = y_m;
+        vctx->vused_m += 1;
+    }
+}
+
+
 double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *vctx) {
 
     if (point_in_puzzle(ctx, p) != 1) {
         return 0;
     }
 
-    int x, y;
+    int x, y, x_m, y_m;
     __complex128 op = p; /* Original p */
     uint8_t step = 0;
     uint32_t count = 0;
@@ -397,14 +444,14 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
         if (step == 0) {
             /* Only track after a0123456789101112 is done */
             assert(point_to_xy(ctx, p, &x, &y) == 0);
-            vctx->visited[y * ctx->img_w + x] = 1;
 
             __complex128 p_m;
             __real__ p_m = -1.0Q * __real__ p;
             __imag__ p_m = -1.0Q * __imag__ p;
 
-            assert(point_to_xy(ctx, p_m, &x, &y) == 0);
-            vctx->visited_m[y * ctx->img_w + x] = 1;
+            assert(point_to_xy(ctx, p_m, &x_m, &y_m) == 0);
+
+            add_visited_xy(ctx, vctx, x, y, x_m, y_m);
         }
 
         step ^= 1; /* toggle between a and b */
@@ -441,63 +488,47 @@ void point_sample(struct render_ctx *ctx, __complex128 p, struct visited_ctx *vc
         return;
     }
 
-    memset(vctx->visited, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
-    memset(vctx->visited_m, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
+    /* memset(vctx->visited, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t)); */
+    /* memset(vctx->visited_m, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t)); */
+    vctx->vused = 0;
+    vctx->vused_m = 0;
 
     double ord = point_order(ctx, p, vctx);
 
     if (isnan(ord) == 0) {
 
-        /* int err; */
-        /* err = pthread_mutex_lock(ctx->grid_mutex); */
-        /* if (err != 0) { */
-        /*     perror("Unable to lock grid mutex to update visited"); */
-        /*     exit(255); */
-        /* } */
-
         int64_t scaled_ord = (int64_t)round(ord * (double)LOG_SCALE);
 
-        for (int y = 0; y < ctx->img_h; y++) {
-            for (int x = 0; x < ctx->img_w; x++) {
-                int o = y * ctx->img_w + x;
-                if (vctx->visited[o] == 1) {
-                    __sync_add_and_fetch(&(ctx->grid[o].count), 1);
-                    /* __sync_add_and_fetch(&(ctx->grid[o].ord_a), ord_a); */
-                    /* __sync_add_and_fetch(&(ctx->grid[o].ord_b), ord_b); */
-                    __sync_add_and_fetch(&(ctx->grid[o].scaled_log_order), scaled_ord);
+        for (int i = 0; i < vctx->vused; i++) {
+            int o = vctx->vy[i] * ctx->img_w + vctx->vx[i];
 
-                    /*ctx->grid[o].order += ord;*/
-                }
+            vctx->visited[o] = 0; /* clear this visit */
 
-                if (vctx->visited_m[o] == 1) {
-                    __sync_add_and_fetch(&(ctx->grid[o].count), 1);
-                    /* __sync_add_and_fetch(&(ctx->grid[o].ord_a), ord_b); /\* a/b swapped *\/ */
-                    /* __sync_add_and_fetch(&(ctx->grid[o].ord_b), ord_a); */
-                    __sync_sub_and_fetch(&(ctx->grid[o].scaled_log_order), scaled_ord);
+            __sync_add_and_fetch(&(ctx->grid[o].count), 1);
+            /* __sync_add_and_fetch(&(ctx->grid[o].ord_a), ord_a); */
+            /* __sync_add_and_fetch(&(ctx->grid[o].ord_b), ord_b); */
+            __sync_add_and_fetch(&(ctx->grid[o].scaled_log_order), scaled_ord);
 
-                    /*ctx->grid[o].order -= ord;*/
-                }
-            }
+            /*ctx->grid[o].order += ord;*/
         }
 
-        /* err = pthread_mutex_unlock(ctx->grid_mutex); */
-        /* if (err != 0) { */
-        /*     perror("Unable to unlock grid mutex after updating visited"); */
-        /*     exit(255); */
-        /* } */
+        for (int i = 0; i < vctx->vused_m; i++) {
+            int o = vctx->vy_m[i] * ctx->img_w + vctx->vx_m[i];
+
+            vctx->visited_m[o] = 0; /* clear this visit */
+
+            __sync_add_and_fetch(&(ctx->grid[o].count), 1);
+            /* __sync_add_and_fetch(&(ctx->grid[o].ord_a), ord_b); /\* a/b swapped *\/ */
+            /* __sync_add_and_fetch(&(ctx->grid[o].ord_b), ord_a); */
+            __sync_sub_and_fetch(&(ctx->grid[o].scaled_log_order), scaled_ord);
+
+            /*ctx->grid[o].order -= ord;*/
+        }
 
     } else {
-        /* Fill in failed pixels sampled with limit */
-
-        /* for (int y = 0; y < ctx->img_h; y++) { */
-        /*     for (int x = 0; x < ctx->img_w; x++) { */
-        /*         if (visited[y * ctx->img_w + x] == 1) { */
-        /*             ctx->grid[y * ctx->img_w + x].count += 1; */
-        /*             ctx->grid[y * ctx->img_w + x].order += log(limit); */
-        /*         } */
-        /*     } */
-        /* } */
-
+        /* Gotta clear visited since we didn't loop */
+        memset(vctx->visited, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
+        memset(vctx->visited_m, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
     }
 }
 
@@ -532,8 +563,32 @@ void * image_sample_thread(void *targ) {
     struct visited_ctx svctx;
     struct visited_ctx *vctx = &svctx;
 
+    vctx->limit = ORD_LIMIT;
+
     vctx->visited = malloc(ctx->img_w * ctx->img_h * sizeof(uint8_t));
+    assert(vctx->visited != NULL);
     vctx->visited_m = malloc(ctx->img_w * ctx->img_h * sizeof(uint8_t));
+    assert(vctx->visited_m != NULL);
+
+    memset(vctx->visited, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
+    memset(vctx->visited_m, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
+
+    vctx->vx = malloc(GROW_VISITED * sizeof(uint32_t));
+    assert(vctx->vx != NULL);
+    vctx->vy = malloc(GROW_VISITED * sizeof(uint32_t));
+    assert(vctx->vy != NULL);
+
+    vctx->vx_m = malloc(GROW_VISITED * sizeof(uint32_t));
+    assert(vctx->vx_m != NULL);
+    vctx->vy_m = malloc(GROW_VISITED * sizeof(uint32_t));
+    assert(vctx->vy_m != NULL);
+
+    vctx->vused = 0;
+    vctx->vsize = GROW_VISITED;
+
+    vctx->vused_m = 0;
+    vctx->vsize_m = GROW_VISITED;
+
 
     fprintf(stderr, "== SAMPLING BORDER PIXELS ==\n");
     for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
@@ -561,6 +616,10 @@ void * image_sample_thread(void *targ) {
 
     free(vctx->visited);
     free(vctx->visited_m);
+    free(vctx->vx);
+    free(vctx->vy);
+    free(vctx->vx_m);
+    free(vctx->vy_m);
 
     return NULL;
 }
@@ -587,13 +646,12 @@ void test_xy_point(struct render_ctx *ctx) {
 
 int main (void) {
 
-
     struct render_ctx *ctx = calloc(1, sizeof(struct render_ctx));
     ctx->n = 12;
     ctx->r = sqrt(2.0);
     ctx->epsilon = 1e-16Q;
 
-    double goalw = 256;
+    double goalw = 512;
     double scalef = goalw / ((2.0 * ctx->r) + 2.0);
     ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef);
     ctx->img_h = (int)floor(2.0 * ctx->r * scalef);
