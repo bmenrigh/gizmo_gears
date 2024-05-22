@@ -95,123 +95,6 @@ void write_png_file(char *filename, int width, int height, png_bytep image_data)
 }
 
 
-void ctx_to_png(struct render_ctx *ctx, char *name) {
-
-    png_bytep image_data = calloc(ctx->img_h * ctx->img_w * 3, sizeof(png_byte));
-
-    /* Find min and max order */
-    double log_max_order = 0;
-    double log_min_order = ORD_LIMIT;
-    for (int y = 0; y < ctx->img_h; y++) {
-        for (int x = 0; x < ctx->img_w; x++) {
-            int o = y * ctx->img_w + x;
-            if (ctx->grid[o].count > 0) {
-                double log_avg_order = fabs((double)ctx->grid[o].scaled_log_order /
-                                            ((double)ctx->grid[o].count * (double)LOG_SCALE));
-                if (log_avg_order > log_max_order) {
-                    log_max_order = log_avg_order;
-                }
-                if (log_avg_order < log_min_order) {
-                    log_min_order = log_avg_order;
-                }
-            }
-        }
-    }
-
-    double max_order = exp(log_max_order);
-    double min_order = exp(log_min_order);
-    fprintf(stderr, "log min: %f; min: %f\n", log_min_order, min_order);
-    fprintf(stderr, "log max: %f; max: %f\n", log_max_order, max_order);
-
-    /* double max_order = 0; */
-    /* double min_order = ORD_LIMIT; */
-    /* for (int y = 0; y < ctx->img_h; y++) { */
-    /*     for (int x = 0; x < ctx->img_w; x++) { */
-    /*         int o = y * ctx->img_w + x; */
-    /*         if (ctx->grid[o].count > 0) { */
-
-    /*             double order; */
-    /*             if (ctx->grid[o].ord_a >= ctx->grid[o].ord_b) { */
-    /*                 order = (double)ctx->grid[o].ord_a / (double)ctx->grid[o].ord_b; */
-    /*             } else { */
-    /*                 order = (double)ctx->grid[o].ord_b / (double)ctx->grid[o].ord_a; */
-    /*             } */
-
-    /*             double avg_order = order / (double)ctx->grid[o].count; */
-    /*             if (avg_order > max_order) { */
-    /*                 max_order = avg_order; */
-    /*             } */
-    /*             if (avg_order < min_order) { */
-    /*                 min_order = avg_order; */
-    /*             } */
-    /*         } */
-    /*     } */
-    /* } */
-
-
-    /* color pixles scaled by max order */
-    for (int y = 0; y < ctx->img_h; y++) {
-        for (int x = 0; x < ctx->img_w; x++) {
-            int o = y * ctx->img_w + x;
-            if (ctx->grid[o].count > 0) {
-                int neg = 0;
-
-                /* double order; */
-                /* if (ctx->grid[o].ord_a >= ctx->grid[o].ord_b) { */
-                /*     order = (double)ctx->grid[o].ord_a / (double)ctx->grid[o].ord_b; */
-                /* } else { */
-                /*     neg = 1; */
-                /*     order = (double)ctx->grid[o].ord_b / (double)ctx->grid[o].ord_a; */
-                /* } */
-
-                /* double avg_order = order / (double)ctx->grid[o].count; */
-
-                double log_avg_order = ((double)ctx->grid[o].scaled_log_order /
-                                        ((double)ctx->grid[o].count * (double)LOG_SCALE));
-
-                if (log_avg_order < 0) {
-                    neg = 1;
-                    log_avg_order = fabs(log_avg_order);
-                }
-
-                double avg_order = exp(log_avg_order);
-
-                double v = atan2(avg_order - min_order, 1.0) / atan2(max_order - min_order, 1.0);
-
-                /* int grey = (int)floor(((avg_order - min_order) / (max_order - min_order)) * 255.0);*/
-                /*int grey = (int)floor(v * 255);
-
-
-                if (neg == 0) {
-                    image_data[o * 3 + 0] = grey;
-                } else {
-                    image_data[o * 3 + 1] = grey;
-                }
-                image_data[o * 3 + 2] = grey;*/
-
-
-                /* delta colors */
-                v = v * M_PI_2;
-
-                if (neg == 0) {
-                    image_data[o * 3 + 0] = (int)round(sin(v) * 255.0);
-                    image_data[o * 3 + 1] = (int)round((1.0 - sin(v * 2.0)) * 255.0);
-                    image_data[o * 3 + 2] = (int)round(cos(v) * 255.0);
-                } else {
-                    image_data[o * 3 + 0] = (int)round((1.0 - sin(v)) * 255.0);
-                    image_data[o * 3 + 1] = (int)round(sin(v * 2.0) * 255.0);
-                    image_data[o * 3 + 2] = (int)round((1.0 - cos(v)) * 255.0);
-                }
-            }
-        }
-    }
-
-    write_png_file(name, ctx->img_w, ctx->img_h, image_data);
-
-    free(image_data);
-}
-
-
 int point_to_xy(struct render_ctx *ctx, __complex128 p, int *x, int *y) {
 
     double px = (double)(__real__ p);
@@ -665,6 +548,156 @@ void test_xy_point(struct render_ctx *ctx) {
         }
     }
 
+}
+
+
+void ctx_to_png(struct render_ctx *ctx, char *name) {
+
+    png_bytep image_data = calloc(ctx->img_h * ctx->img_w * 3, sizeof(png_byte));
+
+    /* Find min and max order */
+    double log_max_order = 0;
+    double log_min_order = ORD_LIMIT;
+    for (int y = 0; y < ctx->img_h; y++) {
+        for (int x = 0; x < ctx->img_w; x++) {
+            int o = y * ctx->img_w + x;
+            if (ctx->grid[o].count > 0) {
+                double log_avg_order = fabs((double)ctx->grid[o].scaled_log_order /
+                                            ((double)ctx->grid[o].count * (double)LOG_SCALE));
+                if (log_avg_order > log_max_order) {
+                    log_max_order = log_avg_order;
+                }
+                if (log_avg_order < log_min_order) {
+                    log_min_order = log_avg_order;
+                }
+            }
+        }
+    }
+
+    double max_order = exp(log_max_order);
+    double min_order = exp(log_min_order);
+    fprintf(stderr, "log min: %f; min: %f\n", log_min_order, min_order);
+    fprintf(stderr, "log max: %f; max: %f\n", log_max_order, max_order);
+
+    /* double max_order = 0; */
+    /* double min_order = ORD_LIMIT; */
+    /* for (int y = 0; y < ctx->img_h; y++) { */
+    /*     for (int x = 0; x < ctx->img_w; x++) { */
+    /*         int o = y * ctx->img_w + x; */
+    /*         if (ctx->grid[o].count > 0) { */
+
+    /*             double order; */
+    /*             if (ctx->grid[o].ord_a >= ctx->grid[o].ord_b) { */
+    /*                 order = (double)ctx->grid[o].ord_a / (double)ctx->grid[o].ord_b; */
+    /*             } else { */
+    /*                 order = (double)ctx->grid[o].ord_b / (double)ctx->grid[o].ord_a; */
+    /*             } */
+
+    /*             double avg_order = order / (double)ctx->grid[o].count; */
+    /*             if (avg_order > max_order) { */
+    /*                 max_order = avg_order; */
+    /*             } */
+    /*             if (avg_order < min_order) { */
+    /*                 min_order = avg_order; */
+    /*             } */
+    /*         } */
+    /*     } */
+    /* } */
+
+
+    /* color pixles scaled by max order */
+    for (int y = 0; y < ctx->img_h; y++) {
+        for (int x = 0; x < ctx->img_w; x++) {
+            int o = y * ctx->img_w + x;
+            if (ctx->grid[o].count > 0) {
+
+                /* Figure out if we should blend with black */
+                double bright_factor = 1.0;
+                if (xy_on_border(ctx, x, y) == 1) {
+
+                    int count_in_puzzle = 0;
+                    for (int i = 0; i < 256; i++) {
+
+                        /* Test point -> xy and xy -> point */
+                        int nx, ny;
+                        __complex128 tp;
+
+                        nx = 0; ny = 0;
+
+                        tp = point_from_xy_rand(ctx, x, y);
+
+                        assert(point_to_xy(ctx, tp, &nx, &ny) == 0);
+
+                        if ((nx != x) || (ny != y)) {
+                            /* If this happens there is a bug with generating points
+                             * in the desired x/y pixel */
+                            fprintf(stderr, "Failed for point (%.5f, %.5f)\n", (double)__real__ tp, (double)__imag__ tp);
+                        }
+
+                        if (point_in_puzzle(ctx, tp) == 1) {
+                            count_in_puzzle++;
+                        }
+                    }
+
+                    bright_factor = (double)count_in_puzzle / 256.0;
+                }
+
+
+                int neg = 0;
+
+                /* double order; */
+                /* if (ctx->grid[o].ord_a >= ctx->grid[o].ord_b) { */
+                /*     order = (double)ctx->grid[o].ord_a / (double)ctx->grid[o].ord_b; */
+                /* } else { */
+                /*     neg = 1; */
+                /*     order = (double)ctx->grid[o].ord_b / (double)ctx->grid[o].ord_a; */
+                /* } */
+
+                /* double avg_order = order / (double)ctx->grid[o].count; */
+
+                double log_avg_order = ((double)ctx->grid[o].scaled_log_order /
+                                        ((double)ctx->grid[o].count * (double)LOG_SCALE));
+
+                if (log_avg_order < 0) {
+                    neg = 1;
+                    log_avg_order = fabs(log_avg_order);
+                }
+
+                double avg_order = exp(log_avg_order);
+
+                double v = atan2(avg_order - min_order, 1.0) / atan2(max_order - min_order, 1.0);
+
+                /* int grey = (int)floor(((avg_order - min_order) / (max_order - min_order)) * 255.0);*/
+                /*int grey = (int)floor(v * 255);
+
+
+                if (neg == 0) {
+                    image_data[o * 3 + 0] = grey;
+                } else {
+                    image_data[o * 3 + 1] = grey;
+                }
+                image_data[o * 3 + 2] = grey;*/
+
+
+                /* delta colors */
+                v = v * M_PI_2;
+
+                if (neg == 0) {
+                    image_data[o * 3 + 0] = (int)round(sin(v) * 255.0 * bright_factor);
+                    image_data[o * 3 + 1] = (int)round((1.0 - sin(v * 2.0)) * 255.0 * bright_factor);
+                    image_data[o * 3 + 2] = (int)round(cos(v) * 255.0 * bright_factor);
+                } else {
+                    image_data[o * 3 + 0] = (int)round((1.0 - sin(v)) * 255.0 * bright_factor);
+                    image_data[o * 3 + 1] = (int)round(sin(v * 2.0) * 255.0 * bright_factor);
+                    image_data[o * 3 + 2] = (int)round((1.0 - cos(v)) * 255.0 * bright_factor);
+                }
+            }
+        }
+    }
+
+    write_png_file(name, ctx->img_w, ctx->img_h, image_data);
+
+    free(image_data);
 }
 
 
