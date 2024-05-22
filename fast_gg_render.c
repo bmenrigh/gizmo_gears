@@ -11,7 +11,7 @@
 
 #include <png.h>
 
-#define ORD_LIMIT 5000000
+#define ORD_LIMIT (50 * 1000 * 1000)
 #define NUM_THREADS 24
 #define LOG_SCALE 0x10000
 #define GROW_VISITED 1024
@@ -40,6 +40,7 @@ struct visited_ctx {
 struct render_ctx {
     uint32_t n;
     double r;
+    double r_sq;
     int img_w, img_h;
     double xmin, xmax, ymin, ymax;
     double pwidth, pheight, half_pwidth, half_pheight, pradius;
@@ -283,10 +284,15 @@ int point_equal_epsilon(struct render_ctx *ctx, __complex128 p, __complex128 q) 
 int point_in_a(struct render_ctx *ctx, __complex128 p) {
 
     __complex128 np = p;
-
     __real__ np += (__float128)1;
 
-    if ((double)cabsq(np) <= ctx->r) {
+    /* Check triangle inequality first */
+    if ((double)(fabsq(__real__ np) + fabsq(__imag__ np)) < ctx->r) {
+        return 1;
+
+        /* Else check squared pythagorean */
+    } else if ((double)(((__real__ np) * (__real__ np)) +
+                        ((__imag__ np) * (__imag__ np))) < ctx->r_sq) {
         return 1;
     } else {
         return 0;
@@ -297,10 +303,15 @@ int point_in_a(struct render_ctx *ctx, __complex128 p) {
 int point_in_b(struct render_ctx *ctx, __complex128 p) {
 
     __complex128 np = p;
-
     __real__ np -= (__float128)1;
 
-    if ((double)cabsq(np) <= ctx->r) {
+    /* Check triangle inequality first */
+    if ((double)(fabsq(__real__ np) + fabsq(__imag__ np)) < ctx->r) {
+        return 1;
+
+        /* Else check squared pythagorean */
+    } else if ((double)(((__real__ np) * (__real__ np)) +
+                        ((__imag__ np) * (__imag__ np))) < ctx->r_sq) {
         return 1;
     } else {
         return 0;
@@ -426,8 +437,8 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
     __complex128 op = p; /* Original p */
     uint8_t step = 0;
     uint32_t count = 0;
-    uint32_t count_a = 0;
-    uint32_t count_b = 0;
+    int32_t count_a = 0;
+    int32_t count_b = 0;
     do {
         if (step == 0) {
             if (point_in_a(ctx, p) == 1) {
@@ -458,7 +469,19 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
         count++;
 
         if (count > vctx->limit) {
-            return NAN;
+
+            /* Try to salvage this point if it's extremely close to 0 */
+            /* Within one loop around of each other */
+            if (abs(count_a - count_b) <= ctx->n) {
+                fprintf(stderr, "Salvaged point at limit\n");
+                return 0.0;
+            } else if (count > ORD_LIMIT) {
+                return 0.0; /* Just assume they were equal as a speedup hack */
+            } else {
+                /* We didn't try long enough to be sure */
+                return NAN;
+            }
+
         }
 
         if (count % 10000000 == 0) {
@@ -598,7 +621,7 @@ void * image_sample_thread(void *targ) {
         for (int x = 0; x < ctx->img_w; x++) {
 
             if (xy_on_border(ctx, x, y) == 1) {
-                xy_sample(ctx, x, y, 64, 4, vctx);
+                xy_sample(ctx, x, y, 128, 16, vctx);
             }
         }
     }
@@ -649,9 +672,10 @@ int main (void) {
     struct render_ctx *ctx = calloc(1, sizeof(struct render_ctx));
     ctx->n = 12;
     ctx->r = sqrt(2.0);
+    ctx->r_sq = 2.0;
     ctx->epsilon = 1e-16Q;
 
-    double goalw = 512;
+    double goalw = 256;
     double scalef = goalw / ((2.0 * ctx->r) + 2.0);
     ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef);
     ctx->img_h = (int)floor(2.0 * ctx->r * scalef);
