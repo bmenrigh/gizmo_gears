@@ -11,10 +11,12 @@
 
 #include <png.h>
 
+
 #define ORD_LIMIT (50 * 1000 * 1000)
 #define NUM_THREADS 24
 #define LOG_SCALE 0x10000
 #define GROW_VISITED 1024
+
 
 struct thread_ctx {
     pthread_t tid;
@@ -403,6 +405,9 @@ void add_visited_xy(struct render_ctx *ctx, struct visited_ctx *vctx, int x, int
         vctx->vx[vctx->vused] = x;
         vctx->vy[vctx->vused] = y;
         vctx->vused += 1;
+    } else if (vctx->visited[o] < 32) {
+        /* Let visited counter grow as high as 32 per pixel per point sampled */
+        vctx->visited[o] =+ 1;
     }
 
     uint32_t o_m = y_m * ctx->img_w + x_m;
@@ -423,6 +428,9 @@ void add_visited_xy(struct render_ctx *ctx, struct visited_ctx *vctx, int x, int
         vctx->vx_m[vctx->vused_m] = x_m;
         vctx->vy_m[vctx->vused_m] = y_m;
         vctx->vused_m += 1;
+    } else if (vctx->visited_m[o_m] < 32) {
+        /* Let visited counter grow as high as 32 per pixel per point sampled */
+        vctx->visited_m[o_m] =+ 1;
     }
 }
 
@@ -525,27 +533,23 @@ void point_sample(struct render_ctx *ctx, __complex128 p, struct visited_ctx *vc
         for (int i = 0; i < vctx->vused; i++) {
             int o = vctx->vy[i] * ctx->img_w + vctx->vx[i];
 
-            vctx->visited[o] = 0; /* clear this visit */
-
-            __sync_add_and_fetch(&(ctx->grid[o].count), 1);
+            __sync_add_and_fetch(&(ctx->grid[o].count), vctx->visited[o]);
             /* __sync_add_and_fetch(&(ctx->grid[o].ord_a), ord_a); */
             /* __sync_add_and_fetch(&(ctx->grid[o].ord_b), ord_b); */
-            __sync_add_and_fetch(&(ctx->grid[o].scaled_log_order), scaled_ord);
+            __sync_add_and_fetch(&(ctx->grid[o].scaled_log_order), scaled_ord * vctx->visited[o]);
 
-            /*ctx->grid[o].order += ord;*/
+            vctx->visited[o] = 0; /* clear this visit */
         }
 
         for (int i = 0; i < vctx->vused_m; i++) {
-            int o = vctx->vy_m[i] * ctx->img_w + vctx->vx_m[i];
+            int o_m = vctx->vy_m[i] * ctx->img_w + vctx->vx_m[i];
 
-            vctx->visited_m[o] = 0; /* clear this visit */
-
-            __sync_add_and_fetch(&(ctx->grid[o].count), 1);
+            __sync_add_and_fetch(&(ctx->grid[o_m].count), vctx->visited_m[o_m]);
             /* __sync_add_and_fetch(&(ctx->grid[o].ord_a), ord_b); /\* a/b swapped *\/ */
             /* __sync_add_and_fetch(&(ctx->grid[o].ord_b), ord_a); */
-            __sync_sub_and_fetch(&(ctx->grid[o].scaled_log_order), scaled_ord);
+            __sync_sub_and_fetch(&(ctx->grid[o_m].scaled_log_order), scaled_ord * vctx->visited_m[o_m]);
 
-            /*ctx->grid[o].order -= ord;*/
+            vctx->visited_m[o_m] = 0; /* clear this visit */
         }
 
     } else {
@@ -588,13 +592,10 @@ void * image_sample_thread(void *targ) {
 
     vctx->limit = ORD_LIMIT;
 
-    vctx->visited = malloc(ctx->img_w * ctx->img_h * sizeof(uint8_t));
+    vctx->visited = calloc(ctx->img_w * ctx->img_h, sizeof(uint8_t));
     assert(vctx->visited != NULL);
-    vctx->visited_m = malloc(ctx->img_w * ctx->img_h * sizeof(uint8_t));
+    vctx->visited_m = calloc(ctx->img_w * ctx->img_h, sizeof(uint8_t));
     assert(vctx->visited_m != NULL);
-
-    memset(vctx->visited, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
-    memset(vctx->visited_m, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
 
     vctx->vx = malloc(GROW_VISITED * sizeof(uint32_t));
     assert(vctx->vx != NULL);
@@ -621,7 +622,7 @@ void * image_sample_thread(void *targ) {
         for (int x = 0; x < ctx->img_w; x++) {
 
             if (xy_on_border(ctx, x, y) == 1) {
-                xy_sample(ctx, x, y, 128, 16, vctx);
+                xy_sample(ctx, x, y, 256, 128, vctx);
             }
         }
     }
@@ -632,7 +633,7 @@ void * image_sample_thread(void *targ) {
 
         for (int x = 0; x < ctx->img_w; x++) {
 
-            xy_sample(ctx, x, y, 64, 8, vctx);
+            xy_sample(ctx, x, y, 128, 64, vctx);
         }
     }
 
@@ -675,7 +676,7 @@ int main (void) {
     ctx->r_sq = 2.0;
     ctx->epsilon = 1e-16Q;
 
-    double goalw = 256;
+    double goalw = 512;
     double scalef = goalw / ((2.0 * ctx->r) + 2.0);
     ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef);
     ctx->img_h = (int)floor(2.0 * ctx->r * scalef);
