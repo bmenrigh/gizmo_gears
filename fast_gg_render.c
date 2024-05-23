@@ -520,6 +520,17 @@ void * image_sample_thread(void *targ) {
         }
     }
 
+    fprintf(stderr, "== OVER-SAMPLING LOW ORDER PIXELS ==\n");
+    vctx->limit = 100000;
+    for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
+        fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);
+
+        for (int x = 0; x < ctx->img_w; x++) {
+
+            xy_sample(ctx, x, y, 256, 256, vctx);
+        }
+    }
+
 
     free(vctx->visited);
     free(vctx->visited_m);
