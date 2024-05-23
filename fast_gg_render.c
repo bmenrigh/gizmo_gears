@@ -13,8 +13,8 @@
 
 
 #define ORD_LIMIT (20 * 1000 * 1000)
-#define NUM_THREADS 12
-#define LOG_SCALE 0x10000
+#define NUM_THREADS 1
+#define LOG_SCALE 0x1000000
 #define GROW_VISITED 1024
 
 
@@ -422,6 +422,12 @@ void point_sample(struct render_ctx *ctx, __complex128 p, struct visited_ctx *vc
         return;
     }
 
+    /* Don't sample from bottom, mirror and sample from top instead */
+    if (__imag__ p < 0.0Q) {
+        __real__ p = 0.0Q - __real__ p;
+        __imag__ p = 0.0Q - __imag__ p;
+    }
+
     /* memset(vctx->visited, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t)); */
     /* memset(vctx->visited_m, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t)); */
     vctx->vused = 0;
@@ -751,7 +757,7 @@ int main (void) {
     /* ctx->ymax = 1.0 * ctx->r; */
 
     /* Render wedge only */
-    double goalh = 512;
+    double goalh = 1024;
     double wedge_height = sqrt(ctx->r_sq - 1.0);
     double wedge_width = ctx->r - 1.0;
     ctx->img_h = goalh;
@@ -771,8 +777,8 @@ int main (void) {
     pthread_mutex_t grid_mutex = PTHREAD_MUTEX_INITIALIZER;
     ctx->grid_mutex = &(grid_mutex);
 
-    __real__ ctx->rot_a = cosq(M_PIq * ((__float128)2 / (__float128)ctx->n));
-    __imag__ ctx->rot_a = sinq(M_PIq * ((__float128)2 / (__float128)ctx->n));
+    __real__ ctx->rot_a = cosq(M_PIq * (2.0Q / (__float128)ctx->n));
+    __imag__ ctx->rot_a = 0.0Q - sinq(M_PIq * (2.0Q / (__float128)ctx->n));
     ctx->rot_b = conjq(ctx->rot_a);
 
     fprintf(stderr, "Image size %dx%d\n", ctx->img_w, ctx->img_h);
