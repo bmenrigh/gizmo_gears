@@ -12,8 +12,8 @@
 #include <png.h>
 
 
-#define ORD_LIMIT (50 * 1000 * 1000)
-#define NUM_THREADS 24
+#define ORD_LIMIT (20 * 1000 * 1000)
+#define NUM_THREADS 12
 #define LOG_SCALE 0x10000
 #define GROW_VISITED 1024
 
@@ -50,6 +50,7 @@ struct render_ctx {
     __float128 epsilon;
     struct samples *grid;
     pthread_mutex_t *grid_mutex;
+    int wedge_only;
 };
 
 
@@ -242,6 +243,16 @@ int point_in_puzzle(struct render_ctx *ctx, __complex128 p) {
 }
 
 
+int point_in_wedge(struct render_ctx *ctx, __complex128 p) {
+
+    if ((point_in_a(ctx, p) == 1) && (point_in_b(ctx, p) == 1)) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+
 __complex128 turn_a(struct render_ctx *ctx, __complex128 p) {
 
     __complex128 np = p;
@@ -332,6 +343,20 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
     int32_t count_b = 0;
     do {
         if (step == 0) {
+
+            if ((ctx->wedge_only == 0) || (point_in_wedge(ctx, p) == 1)) {
+                /* Only track before a is done */
+                assert(point_to_xy(ctx, p, &x, &y) == 0);
+
+                __complex128 p_m;
+                __real__ p_m = -1.0Q * __real__ p;
+                __imag__ p_m = -1.0Q * __imag__ p;
+
+                assert(point_to_xy(ctx, p_m, &x_m, &y_m) == 0);
+
+                add_visited_xy(ctx, vctx, x, y, x_m, y_m);
+            }
+
             if (point_in_a(ctx, p) == 1) {
                 p = turn_a(ctx, p);
                 count_a++;
@@ -343,17 +368,8 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
             }
         }
 
-        if (step == 0) {
-            /* Only track after a0123456789101112 is done */
-            assert(point_to_xy(ctx, p, &x, &y) == 0);
+        if (step == 1) {
 
-            __complex128 p_m;
-            __real__ p_m = -1.0Q * __real__ p;
-            __imag__ p_m = -1.0Q * __imag__ p;
-
-            assert(point_to_xy(ctx, p_m, &x_m, &y_m) == 0);
-
-            add_visited_xy(ctx, vctx, x, y, x_m, y_m);
         }
 
         step ^= 1; /* toggle between a and b */
@@ -402,6 +418,10 @@ void point_sample(struct render_ctx *ctx, __complex128 p, struct visited_ctx *vc
         return;
     }
 
+    if ((ctx->wedge_only == 1) && (point_in_wedge(ctx, p) != 1)) {
+        return;
+    }
+
     /* memset(vctx->visited, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t)); */
     /* memset(vctx->visited_m, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t)); */
     vctx->vused = 0;
@@ -445,9 +465,7 @@ void point_sample(struct render_ctx *ctx, __complex128 p, struct visited_ctx *vc
 
 void xy_sample(struct render_ctx *ctx, int x, int y, uint32_t n, uint32_t m, struct visited_ctx *vctx) {
 
-
     int o = y * ctx->img_w + x;
-
 
     for (uint32_t i = 0; i < n; i++) {
 
@@ -520,14 +538,14 @@ void * image_sample_thread(void *targ) {
         }
     }
 
-    fprintf(stderr, "== OVER-SAMPLING LOW ORDER PIXELS ==\n");
+    fprintf(stderr, "== OVER SAMPLING LOW-ORDER PIXELS ==\n");
     vctx->limit = 100000;
     for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
         fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);
 
         for (int x = 0; x < ctx->img_w; x++) {
 
-            xy_sample(ctx, x, y, 256, 256, vctx);
+            xy_sample(ctx, x, y, 512, 512, vctx);
         }
     }
 
@@ -720,14 +738,29 @@ int main (void) {
     ctx->r_sq = 2.0;
     ctx->epsilon = 1e-16Q;
 
-    double goalw = 512;
-    double scalef = goalw / ((2.0 * ctx->r) + 2.0);
-    ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef);
-    ctx->img_h = (int)floor(2.0 * ctx->r * scalef);
-    ctx->xmin = -1.0 - ctx->r;
-    ctx->xmax = 1.0 + ctx->r;
-    ctx->ymin = -1.0 * ctx->r;
-    ctx->ymax = 1.0 * ctx->r;
+    ctx->wedge_only = 1;
+
+    /* Render full puzzle */
+    /* double goalw = 512; */
+    /* double scalef = goalw / ((2.0 * ctx->r) + 2.0); */
+    /* ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef); */
+    /* ctx->img_h = (int)floor(2.0 * ctx->r * scalef); */
+    /* ctx->xmin = -1.0 - ctx->r; */
+    /* ctx->xmax = 1.0 + ctx->r; */
+    /* ctx->ymin = -1.0 * ctx->r; */
+    /* ctx->ymax = 1.0 * ctx->r; */
+
+    /* Render wedge only */
+    double goalh = 512;
+    double wedge_height = sqrt(ctx->r_sq - 1.0);
+    double wedge_width = ctx->r - 1.0;
+    ctx->img_h = goalh;
+    ctx->img_w = (int)floor((double)goalh * (wedge_width / wedge_height));
+    ctx->xmin = 0.0 - wedge_width;
+    ctx->xmax = wedge_width;
+    ctx->ymin = 0.0 - wedge_height;
+    ctx->ymax = wedge_height;
+
     ctx->pwidth = (ctx->xmax - ctx->xmin) / ((double)ctx->img_w - 1.0);
     ctx->pheight = (ctx->ymax - ctx->ymin) / ((double)ctx->img_h - 1.0);
     ctx->half_pwidth = ctx->pwidth / 2.0;
