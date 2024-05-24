@@ -13,7 +13,7 @@
 
 
 #define ORD_LIMIT (20 * 1000 * 1000)
-#define NUM_THREADS 1
+#define NUM_THREADS 24
 #define LOG_SCALE 0x1000000
 #define GROW_VISITED 1024
 
@@ -51,6 +51,7 @@ struct render_ctx {
     struct samples *grid;
     pthread_mutex_t *grid_mutex;
     int wedge_only;
+    int box_only;
 };
 
 
@@ -103,15 +104,13 @@ int point_to_xy(struct render_ctx *ctx, __complex128 p, int *x, int *y) {
 
     /*fprintf(stderr, "point (x, y): (%.5f, %.5f)\n", px, py);*/
 
-    if ((px + ctx->half_pwidth < ctx->xmin) ||
-        (px - ctx->half_pwidth > ctx->xmax) ||
-        (py + ctx->half_pheight < ctx->ymin) ||
-        (py - ctx->half_pheight > ctx->ymax)) {
+    if ((px < ctx->xmin) || (px > ctx->xmax) ||
+        (py < ctx->ymin) || (py > ctx->ymax)) {
         return -1;
     }
 
-    *x = (int)floor(((px - ctx->xmin) / ctx->pwidth) + 0.5);
-    *y = (int)floor(((py - ctx->ymin) / ctx->pheight) + 0.5);
+    *x = (int)floor((px - ctx->xmin) / ctx->pwidth);
+    *y = (int)floor((ctx->ymax - py) / ctx->pheight);
 
     return 0;
 }
@@ -121,8 +120,8 @@ __complex128 point_from_xy(struct render_ctx *ctx, int x, int y) {
 
     __complex128 p;
 
-    __real__ p = (ctx->xmin + (ctx->pwidth * x));
-    __imag__ p = (ctx->ymin + (ctx->pheight * y));
+    __real__ p = ctx->xmin + (ctx->pwidth * x);
+    __imag__ p = ctx->ymax - (ctx->pheight * y);
 
     return p;
 }
@@ -131,8 +130,8 @@ __complex128 point_from_xy(struct render_ctx *ctx, int x, int y) {
 __complex128 point_rand_offset(struct render_ctx *ctx) {
 
     __complex128 p;
-    __real__ p = (__float128)((((double)rand() / (double)0x80000000) - 0.5) * ctx->pwidth);
-    __imag__ p = (__float128)((((double)rand() / (double)0x80000000) - 0.5) * ctx->pheight);
+    __real__ p = (__float128)(((double)rand() / (double)0x80000000) * ctx->pwidth);
+    __imag__ p = 0.0Q - ((__float128)(((double)rand() / (double)0x80000000) * ctx->pheight));
 
     return p;
 }
@@ -253,6 +252,20 @@ int point_in_wedge(struct render_ctx *ctx, __complex128 p) {
 }
 
 
+int point_in_box(struct render_ctx *ctx, __complex128 p) {
+
+    double px = (double)(__real__ p);
+    double py = (double)(__imag__ p);
+
+    if ((px > ctx->xmin) && (px < ctx->xmax) &&
+        (py > ctx->ymin) && (py < ctx->ymax)) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+
 __complex128 turn_a(struct render_ctx *ctx, __complex128 p) {
 
     __complex128 np = p;
@@ -281,50 +294,54 @@ __complex128 turn_b(struct render_ctx *ctx, __complex128 p) {
 
 void add_visited_xy(struct render_ctx *ctx, struct visited_ctx *vctx, int x, int y, int x_m, int y_m) {
 
-    uint32_t o = y * ctx->img_w + x;
-    if (vctx->visited[o] == 0) {
-        vctx->visited[o] = 1;
+    if ((x >= 0) && (y >= 0)) {
+        uint32_t o = y * ctx->img_w + x;
+        if (vctx->visited[o] == 0) {
+            vctx->visited[o] = 1;
 
-        /* grow x/y array */
-        if (vctx->vused >= (vctx->vsize - 1)) {
-            vctx->vx = realloc(vctx->vx, (vctx->vsize + GROW_VISITED) * sizeof(uint32_t));
-            assert(vctx->vx != NULL);
+            /* grow x/y array */
+            if (vctx->vused >= (vctx->vsize - 1)) {
+                vctx->vx = realloc(vctx->vx, (vctx->vsize + GROW_VISITED) * sizeof(uint32_t));
+                assert(vctx->vx != NULL);
 
-            vctx->vy = realloc(vctx->vy, (vctx->vsize + GROW_VISITED) * sizeof(uint32_t));
-            assert(vctx->vy != NULL);
+                vctx->vy = realloc(vctx->vy, (vctx->vsize + GROW_VISITED) * sizeof(uint32_t));
+                assert(vctx->vy != NULL);
 
-            vctx->vsize += GROW_VISITED;
+                vctx->vsize += GROW_VISITED;
+            }
+
+            vctx->vx[vctx->vused] = x;
+            vctx->vy[vctx->vused] = y;
+            vctx->vused += 1;
+        } else if (vctx->visited[o] < 32) {
+            /* Let visited counter grow as high as 32 per pixel per point sampled */
+            vctx->visited[o] =+ 1;
         }
-
-        vctx->vx[vctx->vused] = x;
-        vctx->vy[vctx->vused] = y;
-        vctx->vused += 1;
-    } else if (vctx->visited[o] < 32) {
-        /* Let visited counter grow as high as 32 per pixel per point sampled */
-        vctx->visited[o] =+ 1;
     }
 
-    uint32_t o_m = y_m * ctx->img_w + x_m;
-    if (vctx->visited_m[o_m] == 0) {
-        vctx->visited_m[o_m] = 1;
+    if ((x_m >= 0) && (y_m >= 0)) {
+        uint32_t o_m = y_m * ctx->img_w + x_m;
+        if (vctx->visited_m[o_m] == 0) {
+            vctx->visited_m[o_m] = 1;
 
-        /* grow x/y array */
-        if (vctx->vused_m >= (vctx->vsize_m - 1)) {
-            vctx->vx_m = realloc(vctx->vx_m, (vctx->vsize_m + GROW_VISITED) * sizeof(uint32_t));
-            assert(vctx->vx_m != NULL);
+            /* grow x/y array */
+            if (vctx->vused_m >= (vctx->vsize_m - 1)) {
+                vctx->vx_m = realloc(vctx->vx_m, (vctx->vsize_m + GROW_VISITED) * sizeof(uint32_t));
+                assert(vctx->vx_m != NULL);
 
-            vctx->vy_m = realloc(vctx->vy_m, (vctx->vsize_m + GROW_VISITED) * sizeof(uint32_t));
-            assert(vctx->vy_m != NULL);
+                vctx->vy_m = realloc(vctx->vy_m, (vctx->vsize_m + GROW_VISITED) * sizeof(uint32_t));
+                assert(vctx->vy_m != NULL);
 
-            vctx->vsize_m += GROW_VISITED;
+                vctx->vsize_m += GROW_VISITED;
+            }
+
+            vctx->vx_m[vctx->vused_m] = x_m;
+            vctx->vy_m[vctx->vused_m] = y_m;
+            vctx->vused_m += 1;
+        } else if (vctx->visited_m[o_m] < 32) {
+            /* Let visited counter grow as high as 32 per pixel per point sampled */
+            vctx->visited_m[o_m] =+ 1;
         }
-
-        vctx->vx_m[vctx->vused_m] = x_m;
-        vctx->vy_m[vctx->vused_m] = y_m;
-        vctx->vused_m += 1;
-    } else if (vctx->visited_m[o_m] < 32) {
-        /* Let visited counter grow as high as 32 per pixel per point sampled */
-        vctx->visited_m[o_m] =+ 1;
     }
 }
 
@@ -344,18 +361,32 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
     do {
         if (step == 0) {
 
-            if ((ctx->wedge_only == 0) || (point_in_wedge(ctx, p) == 1)) {
-                /* Only track before a is done */
-                assert(point_to_xy(ctx, p, &x, &y) == 0);
+            /* Only track before a is done */
+            x = -1;
+            y = -1;
+            x_m = -1;
+            y_m = -1;
+            if (((ctx->wedge_only == 0) && (ctx->box_only == 0)) ||
+                ((ctx->wedge_only == 1) && (point_in_wedge(ctx, p) == 1)) ||
+                ((ctx->box_only == 1) && (point_in_box(ctx, p) == 1))) {
 
-                __complex128 p_m;
-                __real__ p_m = -1.0Q * __real__ p;
-                __imag__ p_m = -1.0Q * __imag__ p;
+                assert(point_to_xy(ctx, p, &x, &y) == 0);
+            }
+
+            __complex128 p_m;
+            __real__ p_m = -1.0Q * __real__ p;
+            __imag__ p_m = -1.0Q * __imag__ p;
+
+            if (((ctx->wedge_only == 0) && (ctx->box_only == 0)) ||
+                ((ctx->wedge_only == 1) && (point_in_wedge(ctx, p_m) == 1)) ||
+                ((ctx->box_only == 1) && (point_in_box(ctx, p_m) == 1))) {
 
                 assert(point_to_xy(ctx, p_m, &x_m, &y_m) == 0);
-
-                add_visited_xy(ctx, vctx, x, y, x_m, y_m);
             }
+
+            /* Now add */
+            add_visited_xy(ctx, vctx, x, y, x_m, y_m);
+
 
             if (point_in_a(ctx, p) == 1) {
                 p = turn_a(ctx, p);
@@ -419,6 +450,10 @@ void point_sample(struct render_ctx *ctx, __complex128 p, struct visited_ctx *vc
     }
 
     if ((ctx->wedge_only == 1) && (point_in_wedge(ctx, p) != 1)) {
+        return;
+    }
+
+    if ((ctx->box_only == 1) && (point_in_box(ctx, p) != 1)) {
         return;
     }
 
@@ -744,7 +779,8 @@ int main (void) {
     ctx->r_sq = 2.0;
     ctx->epsilon = 1e-16Q;
 
-    ctx->wedge_only = 1;
+    ctx->wedge_only = 0;
+    ctx->box_only = 1;
 
     /* Render full puzzle */
     /* double goalw = 512; */
@@ -757,18 +793,27 @@ int main (void) {
     /* ctx->ymax = 1.0 * ctx->r; */
 
     /* Render wedge only */
-    double goalh = 1024;
-    double wedge_height = sqrt(ctx->r_sq - 1.0);
-    double wedge_width = ctx->r - 1.0;
-    ctx->img_h = goalh;
-    ctx->img_w = (int)floor((double)goalh * (wedge_width / wedge_height));
-    ctx->xmin = 0.0 - wedge_width;
-    ctx->xmax = wedge_width;
-    ctx->ymin = 0.0 - wedge_height;
-    ctx->ymax = wedge_height;
+    /* double goalh = 512; */
+    /* double wedge_height = sqrt(ctx->r_sq - 1.0); */
+    /* double wedge_width = ctx->r - 1.0; */
+    /* ctx->img_h = (int)floor(goalh); */
+    /* ctx->img_w = (int)floor(goalh * (wedge_width / wedge_height)); */
+    /* ctx->xmin = 0.0 - wedge_width; */
+    /* ctx->xmax = wedge_width; */
+    /* ctx->ymin = 0.0 - wedge_height; */
+    /* ctx->ymax = wedge_height; */
 
-    ctx->pwidth = (ctx->xmax - ctx->xmin) / ((double)ctx->img_w - 1.0);
-    ctx->pheight = (ctx->ymax - ctx->ymin) / ((double)ctx->img_h - 1.0);
+    /* Render box only */
+    double goalw = 512;
+    ctx->xmin = -0.11;
+    ctx->xmax = 0.11;
+    ctx->ymin = 0.175;
+    ctx->ymax = 0.35;
+    ctx->img_w = (int)floor(goalw);
+    ctx->img_h = (int)floor(goalw / ((ctx->xmax - ctx->xmin) / (ctx->ymax - ctx->ymin)));
+
+    ctx->pwidth = (ctx->xmax - ctx->xmin) / (double)ctx->img_w;
+    ctx->pheight = (ctx->ymax - ctx->ymin) / (double)ctx->img_h;
     ctx->half_pwidth = ctx->pwidth / 2.0;
     ctx->half_pheight = ctx->pheight / 2.0;
     ctx->pradius = sqrt(pow(ctx->half_pwidth, 2.0) + pow(ctx->half_pheight, 2.0));
@@ -778,8 +823,10 @@ int main (void) {
     ctx->grid_mutex = &(grid_mutex);
 
     __real__ ctx->rot_a = cosq(M_PIq * (2.0Q / (__float128)ctx->n));
-    __imag__ ctx->rot_a = 0.0Q - sinq(M_PIq * (2.0Q / (__float128)ctx->n));
+    __imag__ ctx->rot_a = sinq(M_PIq * (2.0Q / (__float128)ctx->n));
     ctx->rot_b = conjq(ctx->rot_a);
+
+    test_xy_point(ctx);
 
     fprintf(stderr, "Image size %dx%d\n", ctx->img_w, ctx->img_h);
 
