@@ -215,7 +215,7 @@ int xy_on_border(struct render_ctx *ctx, int x, int y) {
     __real__ np += (__float128)1;
 
     dist = (double)cabsq(np);
-    if ((dist <= ctx->r + ctx->pradius) && (dist >= ctx->r - ctx->pradius)) {
+    if ((dist <= ctx->r + (2.0 * ctx->pradius)) && (dist >= ctx->r - (2.0 * ctx->pradius))) {
         return 1;
     }
 
@@ -224,7 +224,7 @@ int xy_on_border(struct render_ctx *ctx, int x, int y) {
     __real__ np -= (__float128)1;
 
     dist = (double)cabsq(np);
-    if ((dist <= ctx->r + ctx->pradius) && (dist >= ctx->r - ctx->pradius)) {
+    if ((dist <= ctx->r + (2.0 * ctx->pradius)) && (dist >= ctx->r - (2.0 * ctx->pradius))) {
         return 1;
     }
 
@@ -358,8 +358,16 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
     uint32_t count = 0;
     int32_t count_a = 0;
     int32_t count_b = 0;
+    /*int good = 0;*/
     do {
         if (step == 0) {
+
+            /* double px = (double)(__real__ p); */
+            /* double py = (double)(__imag__ p); */
+            /* if ((px > -0.11) && (px < 0.11) && */
+            /*     (py > 0.175) && (py < 0.35)) { */
+            /*     good = 1; */
+            /* } */
 
             /* Only track before a is done */
             x = -1;
@@ -376,6 +384,13 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
             __complex128 p_m;
             __real__ p_m = -1.0Q * __real__ p;
             __imag__ p_m = -1.0Q * __imag__ p;
+
+            /* double p_mx = (double)(__real__ p_m); */
+            /* double p_my = (double)(__imag__ p_m); */
+            /* if ((p_mx > -0.11) && (p_mx < 0.11) && */
+            /*     (p_my > 0.175) && (p_my < 0.35)) { */
+            /*     good = 1; */
+            /* } */
 
             if (((ctx->wedge_only == 0) && (ctx->box_only == 0)) ||
                 ((ctx->wedge_only == 1) && (point_in_wedge(ctx, p_m) == 1)) ||
@@ -408,6 +423,10 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
 
         if (count > vctx->limit) {
 
+            /* if (good == 0) { */
+            /*     return 0; */
+            /* } */
+
             /* Try to salvage this point if it's extremely close to 0 */
             /* Within one loop around of each other */
             if (abs(count_a - count_b) <= ctx->n) {
@@ -427,6 +446,10 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
         }
     } while ((count < ctx->n) || (point_equal_epsilon(ctx, op, p) != 1));
 
+
+    /* if (good == 0) { */
+    /*     return 0; */
+    /* } */
     /* regular order */
     /*return count;*/
 
@@ -564,7 +587,7 @@ void * image_sample_thread(void *targ) {
         for (int x = 0; x < ctx->img_w; x++) {
 
             if (xy_on_border(ctx, x, y) == 1) {
-                xy_sample(ctx, x, y, 256, 128, vctx);
+                xy_sample(ctx, x, y, 1024, 512, vctx);
             }
         }
     }
@@ -575,20 +598,20 @@ void * image_sample_thread(void *targ) {
 
         for (int x = 0; x < ctx->img_w; x++) {
 
-            xy_sample(ctx, x, y, 128, 64, vctx);
+            xy_sample(ctx, x, y, 128, 1, vctx);
         }
     }
 
-    fprintf(stderr, "== OVER SAMPLING LOW-ORDER PIXELS ==\n");
-    vctx->limit = 100000;
-    for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
-        fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);
+    /* fprintf(stderr, "== OVER SAMPLING LOW-ORDER PIXELS ==\n"); */
+    /* vctx->limit = 100000; */
+    /* for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) { */
+    /*     fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h); */
 
-        for (int x = 0; x < ctx->img_w; x++) {
+    /*     for (int x = 0; x < ctx->img_w; x++) { */
 
-            xy_sample(ctx, x, y, 512, 512, vctx);
-        }
-    }
+    /*         xy_sample(ctx, x, y, 128, 1, vctx); */
+    /*     } */
+    /* } */
 
 
     free(vctx->visited);
@@ -780,17 +803,17 @@ int main (void) {
     ctx->epsilon = 1e-16Q;
 
     ctx->wedge_only = 0;
-    ctx->box_only = 1;
+    ctx->box_only = 0;
 
     /* Render full puzzle */
-    /* double goalw = 512; */
-    /* double scalef = goalw / ((2.0 * ctx->r) + 2.0); */
-    /* ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef); */
-    /* ctx->img_h = (int)floor(2.0 * ctx->r * scalef); */
-    /* ctx->xmin = -1.0 - ctx->r; */
-    /* ctx->xmax = 1.0 + ctx->r; */
-    /* ctx->ymin = -1.0 * ctx->r; */
-    /* ctx->ymax = 1.0 * ctx->r; */
+    double goalw = 8192;
+    double scalef = goalw / ((2.0 * ctx->r) + 2.0);
+    ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef);
+    ctx->img_h = (int)floor(2.0 * ctx->r * scalef);
+    ctx->xmin = -1.0 - ctx->r;
+    ctx->xmax = 1.0 + ctx->r;
+    ctx->ymin = -1.0 * ctx->r;
+    ctx->ymax = 1.0 * ctx->r;
 
     /* Render wedge only */
     /* double goalh = 512; */
@@ -804,13 +827,13 @@ int main (void) {
     /* ctx->ymax = wedge_height; */
 
     /* Render box only */
-    double goalw = 512;
-    ctx->xmin = -0.11;
-    ctx->xmax = 0.11;
-    ctx->ymin = 0.175;
-    ctx->ymax = 0.35;
-    ctx->img_w = (int)floor(goalw);
-    ctx->img_h = (int)floor(goalw / ((ctx->xmax - ctx->xmin) / (ctx->ymax - ctx->ymin)));
+    /* double goalw = 512; */
+    /* ctx->xmin = -0.11; */
+    /* ctx->xmax = 0.11; */
+    /* ctx->ymin = 0.175; */
+    /* ctx->ymax = 0.35; */
+    /* ctx->img_w = (int)floor(goalw); */
+    /* ctx->img_h = (int)floor(goalw / ((ctx->xmax - ctx->xmin) / (ctx->ymax - ctx->ymin))); */
 
     ctx->pwidth = (ctx->xmax - ctx->xmin) / (double)ctx->img_w;
     ctx->pheight = (ctx->ymax - ctx->ymin) / (double)ctx->img_h;
