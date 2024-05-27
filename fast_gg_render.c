@@ -731,6 +731,46 @@ void val_to_rgb(double val, uint8_t *R, uint8_t *G, uint8_t *B, double brightnes
 }
 
 
+double convolve_get_xy_val(double *source, int w, int h, double edge_val, int x, int y) {
+
+    if ((x < 0) || (x >= w) ||
+        (y < 0) || (y >= h)) {
+
+        return edge_val;
+    }
+
+    return source[y * w + x];
+}
+
+
+void convolve_sobel(double *source, double *mag, double *angle, int w, int h, double edge_val) {
+
+    double mh[3][3] = {{1.0, 0.0, -1.0}, {2.0, 0.0, -2.0}, {1.0, 0.0, -1.0}};
+    double mv[3][3] = {{1.0, 2.0, 1.0}, {0.0, 0.0, 0.0}, {-1.0, -2.0, -1.0}};
+
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+
+            double sob_h = 0.0;
+            double sob_v = 0.0;
+
+            for (int yo = -1; yo <= 1; yo++) {
+                for (int xo = -1; xo <= 1; xo++) {
+                    sob_h += mh[yo + 1][xo + 1] * convolve_get_xy_val(source, w, h, edge_val, x + xo, y + yo);
+                    sob_v += mv[yo + 1][xo + 1] * convolve_get_xy_val(source, w, h, edge_val, x + xo, y + yo);
+                }
+            }
+
+            /* magnitude uses pythagorean theorem */
+            mag[y * w + x] = sqrt((sob_h * sob_h) + (sob_v * sob_v));
+
+            /* angle is atan of rise / run */
+            angle[y * w + x] = atan2(sob_v, sob_h);
+        }
+    }
+}
+
+
 void ctx_to_png(struct render_ctx *ctx, char *name) {
 
     png_bytep image_data = calloc(ctx->img_h * ctx->img_w * 3, sizeof(png_byte));
@@ -750,6 +790,7 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
                 if (log_avg_order < log_min_order) {
                     log_min_order = log_avg_order;
                 }
+
             }
         }
     }
@@ -761,11 +802,62 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
     fprintf(stderr, "log min: %f; min: %f\n", log_min_order, min_order);
     fprintf(stderr, "log max: %f; max: %f\n", log_max_order, max_order);
 
+    double *vgrid = calloc(ctx->img_h * ctx->img_w, sizeof(double));
+    double *vsobel_mag = calloc(ctx->img_h * ctx->img_w, sizeof(double));
+    double *vsobel_ang = calloc(ctx->img_h * ctx->img_w, sizeof(double));
+
+    /* Fill in the vgrid with vals for each pixel */
+    for (int y = 0; y < ctx->img_h; y++) {
+        for (int x = 0; x < ctx->img_w; x++) {
+
+            int o = xy_to_offset(ctx, x, y);
+
+            if (ctx->grid[o].count > 0) {
+
+                double log_avg_order = ((double)ctx->grid[o].scaled_log_order /
+                                        ((double)ctx->grid[o].count * (double)LOG_SCALE));
+
+                double v = log_order_to_val(log_avg_order, min_order, max_order);
+
+                vgrid[o] = v;
+            }
+        }
+    }
+
+    /* Run sobel filter on vgrid */
+    convolve_sobel(vgrid, vsobel_mag, vsobel_ang, ctx->img_w, ctx->img_h, 0.0);
+
+    /* normalize magnitudes back into [-1, 1] */
+    /* first find max maginutude */
+    double max_mag = 1.0;
+    for (int y = 0; y < ctx->img_h; y++) {
+        for (int x = 0; x < ctx->img_w; x++) {
+
+            int o = xy_to_offset(ctx, x, y);
+
+            if (fabs(vsobel_mag[o]) > max_mag) {
+                max_mag = fabs(vsobel_mag[o]);
+            }
+        }
+    }
+
+    /* now scale down by max */
+    for (int y = 0; y < ctx->img_h; y++) {
+        for (int x = 0; x < ctx->img_w; x++) {
+
+            int o = xy_to_offset(ctx, x, y);
+
+            vsobel_mag[o] /= max_mag;
+        }
+    }
+
 
     /* color pixles scaled by max order */
     for (int y = 0; y < ctx->img_h; y++) {
         for (int x = 0; x < ctx->img_w; x++) {
+
             int o = xy_to_offset(ctx, x, y);
+
             if (ctx->grid[o].count > 0) {
 
                 /* Figure out if we should blend with black */
@@ -799,16 +891,12 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
                     bright_factor = (double)count_in_puzzle / 256.0;
                 }
 
-                double log_avg_order = ((double)ctx->grid[o].scaled_log_order /
-                                        ((double)ctx->grid[o].count * (double)LOG_SCALE));
-
-                double v = log_order_to_val(log_avg_order, min_order, max_order);
 
                 uint8_t *R = &(image_data[o * 3 + 0]);
                 uint8_t *G = &(image_data[o * 3 + 1]);
                 uint8_t *B = &(image_data[o * 3 + 2]);
 
-                val_to_rgb(v, R, G, B, bright_factor);
+                val_to_rgb(vgrid[o], R, G, B, bright_factor * fabs(vsobel_mag[o]));
             }
         }
     }
