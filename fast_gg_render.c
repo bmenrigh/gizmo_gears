@@ -18,6 +18,11 @@
 #define GROW_VISITED 1024
 
 
+#define COMPLEX_T __complex128
+#define FLOAT_T __float128
+#define FLOAT_L(N) (N##Q)
+
+
 struct thread_ctx {
     pthread_t tid;
     int tnum;
@@ -40,13 +45,13 @@ struct visited_ctx {
 
 struct render_ctx {
     uint32_t n;
-    __float128 r;
-    __float128 r_sq;
+    FLOAT_T r;
+    FLOAT_T r_sq;
     int img_w, img_h;
     double xmin, xmax, ymin, ymax;
     double pwidth, pheight, half_pwidth, half_pheight, pradius;
-    __complex128 rot_a, rot_b;
-    __float128 epsilon;
+    COMPLEX_T rot_a, rot_b;
+    FLOAT_T epsilon;
     struct samples *grid;
     pthread_mutex_t *grid_mutex;
     int wedge_only;
@@ -101,7 +106,7 @@ int xy_to_offset(struct render_ctx *ctx, int x, int y) {
 }
 
 
-int point_to_xy(struct render_ctx *ctx, __complex128 p, int *x, int *y) {
+int point_to_xy(struct render_ctx *ctx, COMPLEX_T p, int *x, int *y) {
 
     double px = (double)(__real__ p);
     double py = (double)(__imag__ p);
@@ -118,9 +123,9 @@ int point_to_xy(struct render_ctx *ctx, __complex128 p, int *x, int *y) {
 }
 
 
-__complex128 point_from_xy(struct render_ctx *ctx, int x, int y) {
+COMPLEX_T point_from_xy(struct render_ctx *ctx, int x, int y) {
 
-    __complex128 p;
+    COMPLEX_T p;
 
     __real__ p = ctx->xmin + (ctx->pwidth * x);
     __imag__ p = ctx->ymax - (ctx->pheight * y);
@@ -129,23 +134,23 @@ __complex128 point_from_xy(struct render_ctx *ctx, int x, int y) {
 }
 
 
-__complex128 point_rand_offset(struct render_ctx *ctx) {
+COMPLEX_T point_rand_offset(struct render_ctx *ctx) {
 
-    __complex128 p;
-    __real__ p = (__float128)(((double)rand() / (double)0x80000000) * ctx->pwidth);
-    __imag__ p = 0.0Q - ((__float128)(((double)rand() / (double)0x80000000) * ctx->pheight));
+    COMPLEX_T p;
+    __real__ p = (FLOAT_T)(((double)rand() / (double)0x80000000) * ctx->pwidth);
+    __imag__ p = FLOAT_L(0.0) - ((FLOAT_T)(((double)rand() / (double)0x80000000) * ctx->pheight));
 
     return p;
 }
 
 
-__complex128 point_from_xy_rand(struct render_ctx *ctx, int x, int y) {
+COMPLEX_T point_from_xy_rand(struct render_ctx *ctx, int x, int y) {
 
     return point_from_xy(ctx, x, y) + point_rand_offset(ctx);
 }
 
 
-int point_equal_double(__complex128 p, __complex128 q) {
+int point_equal_double(COMPLEX_T p, COMPLEX_T q) {
 
     if (((double)(__real__ p) == (double)(__real__ q)) &&
         ((double)(__imag__ p) == (double)(__imag__ q))) {
@@ -157,7 +162,7 @@ int point_equal_double(__complex128 p, __complex128 q) {
 }
 
 
-int point_equal_epsilon(struct render_ctx *ctx, __complex128 p, __complex128 q) {
+int point_equal_epsilon(struct render_ctx *ctx, COMPLEX_T p, COMPLEX_T q) {
 
     if (fabsq(__real__ p - __real__ q) + fabsq(__imag__ p - __imag__ q)  < ctx->epsilon) {
         return 1;
@@ -167,10 +172,10 @@ int point_equal_epsilon(struct render_ctx *ctx, __complex128 p, __complex128 q) 
 }
 
 
-int point_in_a(struct render_ctx *ctx, __complex128 p) {
+int point_in_a(struct render_ctx *ctx, COMPLEX_T p) {
 
-    __complex128 np = p;
-    __real__ np += 1.0Q;
+    COMPLEX_T np = p;
+    __real__ np += FLOAT_L(1.0);
 
     /* Check triangle inequality first */
     if (fabsq(__real__ np) + fabsq(__imag__ np) < ctx->r) {
@@ -186,10 +191,10 @@ int point_in_a(struct render_ctx *ctx, __complex128 p) {
 }
 
 
-int point_in_b(struct render_ctx *ctx, __complex128 p) {
+int point_in_b(struct render_ctx *ctx, COMPLEX_T p) {
 
-    __complex128 np = p;
-    __real__ np -= 1.0Q;
+    COMPLEX_T np = p;
+    __real__ np -= FLOAT_L(1.0);
 
     /* Check triangle inequality first */
     if (fabsq(__real__ np) + fabsq(__imag__ np) < ctx->r) {
@@ -207,13 +212,13 @@ int point_in_b(struct render_ctx *ctx, __complex128 p) {
 
 int xy_on_border(struct render_ctx *ctx, int x, int y) {
 
-    __complex128 p = point_from_xy(ctx, x, y);
-    __complex128 np;
+    COMPLEX_T p = point_from_xy(ctx, x, y);
+    COMPLEX_T np;
     double dist;
 
     /* Check distace to A */
     np = p;
-    __real__ np += 1.0Q;
+    __real__ np += FLOAT_L(1.0);
 
     dist = (double)cabsq(np);
     if ((dist <= (double)ctx->r + (2.0 * ctx->pradius)) && (dist >= (double)ctx->r - (2.0 * ctx->pradius))) {
@@ -222,7 +227,7 @@ int xy_on_border(struct render_ctx *ctx, int x, int y) {
 
     /* Check distace to B */
     np = p;
-    __real__ np -= 1.0Q;
+    __real__ np -= FLOAT_L(1.0);
 
     dist = (double)cabsq(np);
     if ((dist <= (double)ctx->r + (2.0 * ctx->pradius)) && (dist >= (double)ctx->r - (2.0 * ctx->pradius))) {
@@ -233,7 +238,7 @@ int xy_on_border(struct render_ctx *ctx, int x, int y) {
 }
 
 
-int point_in_puzzle(struct render_ctx *ctx, __complex128 p) {
+int point_in_puzzle(struct render_ctx *ctx, COMPLEX_T p) {
 
     int in_a = point_in_a(ctx, p);
     int in_b = point_in_b(ctx, p);
@@ -252,7 +257,7 @@ int point_in_puzzle(struct render_ctx *ctx, __complex128 p) {
 }
 
 
-int point_in_wedge(struct render_ctx *ctx, __complex128 p) {
+int point_in_wedge(struct render_ctx *ctx, COMPLEX_T p) {
 
     if ((point_in_a(ctx, p) == 1) && (point_in_b(ctx, p) == 1)) {
         return 1;
@@ -262,7 +267,7 @@ int point_in_wedge(struct render_ctx *ctx, __complex128 p) {
 }
 
 
-int point_in_box(struct render_ctx *ctx, __complex128 p) {
+int point_in_box(struct render_ctx *ctx, COMPLEX_T p) {
 
     double px = (double)(__real__ p);
     double py = (double)(__imag__ p);
@@ -276,27 +281,27 @@ int point_in_box(struct render_ctx *ctx, __complex128 p) {
 }
 
 
-__complex128 turn_a(struct render_ctx *ctx, __complex128 p) {
+COMPLEX_T turn_a(struct render_ctx *ctx, COMPLEX_T p) {
 
-    __complex128 np = p;
-    __real__ np += (__float128)1;
+    COMPLEX_T np = p;
+    __real__ np += (FLOAT_T)1;
 
     np *= ctx->rot_a;
 
-    __real__ np -= (__float128)1;
+    __real__ np -= (FLOAT_T)1;
 
     return np;
 }
 
 
-__complex128 turn_b(struct render_ctx *ctx, __complex128 p) {
+COMPLEX_T turn_b(struct render_ctx *ctx, COMPLEX_T p) {
 
-    __complex128 np = p;
-    __real__ np -= (__float128)1;
+    COMPLEX_T np = p;
+    __real__ np -= (FLOAT_T)1;
 
     np *= ctx->rot_b;
 
-    __real__ np += (__float128)1;
+    __real__ np += (FLOAT_T)1;
 
     return np;
 }
@@ -454,14 +459,14 @@ void add_visited_xy(struct render_ctx *ctx, struct visited_ctx *vctx, int x, int
 }
 
 
-double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *vctx) {
+double point_order(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx) {
 
     if (point_in_puzzle(ctx, p) != 1) {
         return 0;
     }
 
     int x, y, x_m, y_m;
-    __complex128 op = p; /* Original p */
+    COMPLEX_T op = p; /* Original p */
     uint8_t step = 0;
     uint32_t count = 0;
     int32_t count_a = 0;
@@ -482,9 +487,9 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
                 assert(point_to_xy(ctx, p, &x, &y) == 0);
             }
 
-            __complex128 p_m;
-            __real__ p_m = 0.0Q - __real__ p;
-            __imag__ p_m = 0.0Q - __imag__ p;
+            COMPLEX_T p_m;
+            __real__ p_m = FLOAT_L(0.0) - __real__ p;
+            __imag__ p_m = FLOAT_L(0.0) - __imag__ p;
 
             if (((ctx->wedge_only == 0) && (ctx->box_only == 0)) ||
                 ((ctx->wedge_only == 1) && (point_in_wedge(ctx, p_m) == 1)) ||
@@ -594,7 +599,7 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
 }
 
 
-void point_sample(struct render_ctx *ctx, __complex128 p, struct visited_ctx *vctx) {
+void point_sample(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx) {
 
     if (point_in_puzzle(ctx, p) != 1) {
         return;
@@ -665,7 +670,7 @@ void xy_sample(struct render_ctx *ctx, int x, int y, uint32_t n, uint32_t m, str
 
         if (gcount < m) {
 
-            __complex128 p = point_from_xy_rand(ctx, x, y);
+            COMPLEX_T p = point_from_xy_rand(ctx, x, y);
 
             point_sample(ctx, p, vctx);
         } else {
@@ -830,7 +835,7 @@ void test_xy_point(struct render_ctx *ctx) {
     /* Test point -> xy and xy -> point */
     int tx = 13, ty = 31;
     int nx, ny;
-    __complex128 tp;
+    COMPLEX_T tp;
     for (int i = 0; i < 1000; i++) {
         nx = 0; ny = 0;
         tp = point_from_xy_rand(ctx, tx, ty);
@@ -942,7 +947,7 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
 
                         /* Test point -> xy and xy -> point */
                         int nx, ny;
-                        __complex128 tp;
+                        COMPLEX_T tp;
 
                         nx = 0; ny = 0;
 
@@ -988,33 +993,51 @@ int main (void) {
 
     struct render_ctx *ctx = calloc(1, sizeof(struct render_ctx));
     ctx->n = 12;
-    ctx->r = sqrtq(2.0Q);
-    ctx->r_sq = 2.0Q;
-    ctx->epsilon = 1e-16Q;
+    ctx->r = sqrtq(FLOAT_L(2.0));
+    ctx->r_sq = FLOAT_L(2.0);
 
-    ctx->wedge_only = 0;
+    /* n=12 critical radius */
+    /* https://twistypuzzles.com/forum/viewtopic.php?t=25752&hilit=gizmo+gears+critical+radius&start=600 */
+    /* benpuzzles: R=sqrt(40-22*sqrt(3)) or 1.376547214... */
+    /* ctx->n = 12; */
+    /* ctx->r = sqrtq(40.0Q - 22.0Q * sqrtq(3.0Q)); */
+    /* ctx->r_sq = 40.0Q - 22.0Q * sqrtq(3.0Q); */
+
+    /* N=5 critical radius */
+    /* ctx->n = 5; */
+    /* ctx->r = sqrtq((7.0Q + sqrtq(5.0Q)) / 2.0Q); */
+    /* ctx->r_sq = (7.0Q + sqrtq(5.0Q)) / 2.0Q; */
+
+    /* ctx->n = 14; */
+    /* ctx->r_sq = 1.6180339887Q; */
+    /* ctx->r = sqrtq(ctx->r_sq); */
+
+
+    ctx->epsilon = FLOAT_L(1e-16);
+
+    ctx->wedge_only = 1;
     ctx->box_only = 0;
 
     /* Render full puzzle */
-    double goalw = 1024;
-    double scalef = goalw / ((2.0 * ctx->r) + 2.0);
-    ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef);
-    ctx->img_h = (int)floor(2.0 * ctx->r * scalef);
-    ctx->xmin = -1.0 - ctx->r;
-    ctx->xmax = 1.0 + ctx->r;
-    ctx->ymin = -1.0 * ctx->r;
-    ctx->ymax = 1.0 * ctx->r;
+    /* double goalw = 1024; */
+    /* double scalef = goalw / ((2.0 * ctx->r) + 2.0); */
+    /* ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef); */
+    /* ctx->img_h = (int)floor(2.0 * ctx->r * scalef); */
+    /* ctx->xmin = -1.0 - ctx->r; */
+    /* ctx->xmax = 1.0 + ctx->r; */
+    /* ctx->ymin = -1.0 * ctx->r; */
+    /* ctx->ymax = 1.0 * ctx->r; */
 
     /* Render wedge only */
-    /* double goalh = 1024; */
-    /* double wedge_height = sqrt(ctx->r_sq - 1.0); */
-    /* double wedge_width = ctx->r - 1.0; */
-    /* ctx->img_h = (int)floor(goalh); */
-    /* ctx->img_w = (int)floor(goalh * (wedge_width / wedge_height)); */
-    /* ctx->xmin = 0.0 - wedge_width; */
-    /* ctx->xmax = wedge_width; */
-    /* ctx->ymin = 0.0 - wedge_height; */
-    /* ctx->ymax = wedge_height; */
+    double goalh = 1024;
+    double wedge_height = sqrt(ctx->r_sq - 1.0);
+    double wedge_width = ctx->r - 1.0;
+    ctx->img_h = (int)floor(goalh);
+    ctx->img_w = (int)floor(goalh * (wedge_width / wedge_height));
+    ctx->xmin = 0.0 - wedge_width;
+    ctx->xmax = wedge_width;
+    ctx->ymin = 0.0 - wedge_height;
+    ctx->ymax = wedge_height;
 
     /* Render box only */
     /* double goalw = 2048; */
@@ -1035,8 +1058,8 @@ int main (void) {
     pthread_mutex_t grid_mutex = PTHREAD_MUTEX_INITIALIZER;
     ctx->grid_mutex = &(grid_mutex);
 
-    __real__ ctx->rot_a = cosq(M_PIq * (2.0Q / (__float128)ctx->n));
-    __imag__ ctx->rot_a = sinq(M_PIq * (2.0Q / (__float128)ctx->n));
+    __real__ ctx->rot_a = cosq(M_PIq * (FLOAT_L(2.0) / (FLOAT_T)ctx->n));
+    __imag__ ctx->rot_a = sinq(M_PIq * (FLOAT_L(2.0) / (FLOAT_T)ctx->n));
     ctx->rot_b = conjq(ctx->rot_a);
 
     test_xy_point(ctx);
