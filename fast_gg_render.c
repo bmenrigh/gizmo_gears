@@ -302,6 +302,104 @@ __complex128 turn_b(struct render_ctx *ctx, __complex128 p) {
 }
 
 
+double convolve_get_xy_val(double *source, int w, int h, double edge_val, int x, int y) {
+
+    if ((x < 0) || (x >= w) ||
+        (y < 0) || (y >= h)) {
+
+        return edge_val;
+    }
+
+    return source[y * w + x];
+}
+
+
+void convolve_sobel(double *source, double *mag, double *angle, int w, int h, double edge_val) {
+
+    double mh[3][3] = {{1.0, 0.0, -1.0}, {2.0, 0.0, -2.0}, {1.0, 0.0, -1.0}};
+    double mv[3][3] = {{1.0, 2.0, 1.0}, {0.0, 0.0, 0.0}, {-1.0, -2.0, -1.0}};
+
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+
+            double sob_h = 0.0;
+            double sob_v = 0.0;
+
+            for (int yo = -1; yo <= 1; yo++) {
+                for (int xo = -1; xo <= 1; xo++) {
+                    sob_h += mh[yo + 1][xo + 1] * convolve_get_xy_val(source, w, h, edge_val, x + xo, y + yo);
+                    sob_v += mv[yo + 1][xo + 1] * convolve_get_xy_val(source, w, h, edge_val, x + xo, y + yo);
+                }
+            }
+
+            /* magnitude uses pythagorean theorem */
+            mag[y * w + x] = sqrt((sob_h * sob_h) + (sob_v * sob_v));
+
+            /* angle is atan of rise / run */
+            angle[y * w + x] = atan2(sob_v, sob_h);
+        }
+    }
+}
+
+
+double log_order_to_val(double log_order, double min_order, double max_order) {
+
+    /* Only let exp() operate on positive logs */
+    int neg = 0;
+    if (log_order < 0) {
+        neg = 1;
+        log_order = fabs(log_order);
+    }
+
+    /* Undo log */
+    double order = exp(log_order);
+
+    /* Saturate order in case of minor roundoff issues */
+    if (order > max_order) {
+        order = max_order;
+    }
+    if (order < min_order) {
+        order = min_order;
+    }
+
+    /* atan -> val mapping */
+    double v = atan2(order - min_order, 1.0) / atan2(max_order - min_order, 1.0);
+
+    /* Saturate (shouldn't happen if atan2 behaves itself) */
+    if (v > 1.0) {
+        v = 1.0;
+    }
+
+    /* Flip val to [0, -1] if the log was negative */
+    if (neg == 1) {
+        v = 0.0 - v;
+    }
+
+    return v;
+}
+
+
+void val_to_rgb(double val, uint8_t *R, uint8_t *G, uint8_t *B, double brightness) {
+
+    assert((brightness >= 0.0) && (brightness <= 1.0));
+
+    /* delta colors */
+    double vp2 = val * M_PI_2;
+
+    if (vp2 >= 0) {
+        *R = (uint8_t)round(sin(vp2) * 255.0 * brightness);
+        *G = (uint8_t)round((1.0 - sin(vp2 * 2.0)) * 255.0 * brightness);
+        *B = (uint8_t)round(cos(vp2) * 255.0 * brightness);
+    } else {
+        vp2 = 0.0 - vp2; /* flip to positive */
+
+        *R = (int)round((1.0 - sin(vp2)) * 255.0 * brightness);
+        *G = (int)round(sin(vp2 * 2.0) * 255.0 * brightness);
+        *B = (int)round((1.0 - cos(vp2)) * 255.0 * brightness);
+    }
+}
+
+
 void add_visited_xy(struct render_ctx *ctx, struct visited_ctx *vctx, int x, int y, int x_m, int y_m) {
 
     if ((x >= 0) && (y >= 0)) {
@@ -642,6 +740,79 @@ void * image_sample_thread(void *targ) {
     /*     } */
     /* } */
 
+    fprintf(stderr, "== OVER SAMPLING SOBEL EDGE PIXELS ==\n");
+    double max_order = (double)ctx->n;
+    double min_order = 1.0;
+
+    double *vgrid = calloc(ctx->img_h * ctx->img_w, sizeof(double));
+    double *vsobel_mag = calloc(ctx->img_h * ctx->img_w, sizeof(double));
+    double *vsobel_ang = calloc(ctx->img_h * ctx->img_w, sizeof(double));
+
+    /* Fill in the vgrid with vals for each pixel */
+    for (int y = 0; y < ctx->img_h; y++) {
+        for (int x = 0; x < ctx->img_w; x++) {
+
+            int o = xy_to_offset(ctx, x, y);
+
+            if (ctx->grid[o].count > 0) {
+
+                double log_avg_order = ((double)ctx->grid[o].scaled_log_order /
+                                        ((double)ctx->grid[o].count * (double)LOG_SCALE));
+
+                double v = log_order_to_val(log_avg_order, min_order, max_order);
+
+                vgrid[o] = v;
+            }
+        }
+    }
+
+    /* Run sobel filter on vgrid */
+    convolve_sobel(vgrid, vsobel_mag, vsobel_ang, ctx->img_w, ctx->img_h, 0.0);
+
+    /* normalize magnitudes back into [-1, 1] */
+    /* first find max maginutude */
+    double max_mag = 1.0;
+    for (int y = 0; y < ctx->img_h; y++) {
+        for (int x = 0; x < ctx->img_w; x++) {
+
+            int o = xy_to_offset(ctx, x, y);
+
+            if (fabs(vsobel_mag[o]) > max_mag) {
+                max_mag = fabs(vsobel_mag[o]);
+            }
+        }
+    }
+
+    /* now scale down by max */
+    for (int y = 0; y < ctx->img_h; y++) {
+        for (int x = 0; x < ctx->img_w; x++) {
+
+            int o = xy_to_offset(ctx, x, y);
+
+            vsobel_mag[o] /= max_mag;
+        }
+    }
+
+    /* Use the sobel filter magnitude to select pixels for
+     * sampling to make sure edges have enough samples
+     */
+    for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
+
+        fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);
+
+        for (int x = 0; x < ctx->img_w; x++) {
+
+            int o = xy_to_offset(ctx, x, y);
+            int amt = (int)(128.0 * fabs(vsobel_mag[o]));
+
+            xy_sample(ctx, x, y, 128, amt, vctx);
+        }
+    }
+
+
+    free(vgrid);
+    free(vsobel_mag);
+    free(vsobel_ang);
 
     free(vctx->visited);
     free(vctx->visited_m);
@@ -670,104 +841,6 @@ void test_xy_point(struct render_ctx *ctx) {
         }
     }
 
-}
-
-
-double log_order_to_val(double log_order, double min_order, double max_order) {
-
-    /* Only let exp() operate on positive logs */
-    int neg = 0;
-    if (log_order < 0) {
-        neg = 1;
-        log_order = fabs(log_order);
-    }
-
-    /* Undo log */
-    double order = exp(log_order);
-
-    /* Saturate order in case of minor roundoff issues */
-    if (order > max_order) {
-        order = max_order;
-    }
-    if (order < min_order) {
-        order = min_order;
-    }
-
-    /* atan -> val mapping */
-    double v = atan2(order - min_order, 1.0) / atan2(max_order - min_order, 1.0);
-
-    /* Saturate (shouldn't happen if atan2 behaves itself) */
-    if (v > 1.0) {
-        v = 1.0;
-    }
-
-    /* Flip val to [0, -1] if the log was negative */
-    if (neg == 1) {
-        v = 0.0 - v;
-    }
-
-    return v;
-}
-
-
-void val_to_rgb(double val, uint8_t *R, uint8_t *G, uint8_t *B, double brightness) {
-
-    assert((brightness >= 0.0) && (brightness <= 1.0));
-
-    /* delta colors */
-    double vp2 = val * M_PI_2;
-
-    if (vp2 >= 0) {
-        *R = (uint8_t)round(sin(vp2) * 255.0 * brightness);
-        *G = (uint8_t)round((1.0 - sin(vp2 * 2.0)) * 255.0 * brightness);
-        *B = (uint8_t)round(cos(vp2) * 255.0 * brightness);
-    } else {
-        vp2 = 0.0 - vp2; /* flip to positive */
-
-        *R = (int)round((1.0 - sin(vp2)) * 255.0 * brightness);
-        *G = (int)round(sin(vp2 * 2.0) * 255.0 * brightness);
-        *B = (int)round((1.0 - cos(vp2)) * 255.0 * brightness);
-    }
-}
-
-
-double convolve_get_xy_val(double *source, int w, int h, double edge_val, int x, int y) {
-
-    if ((x < 0) || (x >= w) ||
-        (y < 0) || (y >= h)) {
-
-        return edge_val;
-    }
-
-    return source[y * w + x];
-}
-
-
-void convolve_sobel(double *source, double *mag, double *angle, int w, int h, double edge_val) {
-
-    double mh[3][3] = {{1.0, 0.0, -1.0}, {2.0, 0.0, -2.0}, {1.0, 0.0, -1.0}};
-    double mv[3][3] = {{1.0, 2.0, 1.0}, {0.0, 0.0, 0.0}, {-1.0, -2.0, -1.0}};
-
-    for (int y = 0; y < h; y++) {
-        for (int x = 0; x < w; x++) {
-
-            double sob_h = 0.0;
-            double sob_v = 0.0;
-
-            for (int yo = -1; yo <= 1; yo++) {
-                for (int xo = -1; xo <= 1; xo++) {
-                    sob_h += mh[yo + 1][xo + 1] * convolve_get_xy_val(source, w, h, edge_val, x + xo, y + yo);
-                    sob_v += mv[yo + 1][xo + 1] * convolve_get_xy_val(source, w, h, edge_val, x + xo, y + yo);
-                }
-            }
-
-            /* magnitude uses pythagorean theorem */
-            mag[y * w + x] = sqrt((sob_h * sob_h) + (sob_v * sob_v));
-
-            /* angle is atan of rise / run */
-            angle[y * w + x] = atan2(sob_v, sob_h);
-        }
-    }
 }
 
 
@@ -896,12 +969,16 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
                 uint8_t *G = &(image_data[o * 3 + 1]);
                 uint8_t *B = &(image_data[o * 3 + 2]);
 
-                val_to_rgb(vgrid[o], R, G, B, bright_factor * fabs(vsobel_mag[o]));
+                val_to_rgb(vgrid[o], R, G, B, bright_factor);
             }
         }
     }
 
     write_png_file(name, ctx->img_w, ctx->img_h, image_data);
+
+    free(vgrid);
+    free(vsobel_mag);
+    free(vsobel_ang);
 
     free(image_data);
 }
