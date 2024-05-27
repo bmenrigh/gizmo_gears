@@ -666,6 +666,64 @@ void test_xy_point(struct render_ctx *ctx) {
 }
 
 
+double log_order_to_val(double log_order, double min_order, double max_order) {
+
+    /* Only let exp() operate on positive logs */
+    int neg = 0;
+    if (log_order < 0) {
+        neg = 1;
+        log_order = fabs(log_order);
+    }
+
+    /* Undo log */
+    double order = exp(log_order);
+
+    /* Saturate order in case of minor roundoff issues */
+    if (order > max_order) {
+        order = max_order;
+    }
+    if (order < min_order) {
+        order = min_order;
+    }
+
+    /* atan -> val mapping */
+    double v = atan2(order - min_order, 1.0) / atan2(max_order - min_order, 1.0);
+
+    /* Saturate (shouldn't happen if atan2 behaves itself) */
+    if (v > 1.0) {
+        v = 1.0;
+    }
+
+    /* Flip val to [0, -1] if the log was negative */
+    if (neg == 1) {
+        v = 0.0 - v;
+    }
+
+    return v;
+}
+
+
+void val_to_rgb(double val, uint8_t *R, uint8_t *G, uint8_t *B, double brightness) {
+
+    assert((brightness >= 0.0) && (brightness <= 1.0));
+
+    /* delta colors */
+    double vp2 = val * M_PI_2;
+
+    if (vp2 >= 0) {
+        *R = (uint8_t)round(sin(vp2) * 255.0 * brightness);
+        *G = (uint8_t)round((1.0 - sin(vp2 * 2.0)) * 255.0 * brightness);
+        *B = (uint8_t)round(cos(vp2) * 255.0 * brightness);
+    } else {
+        vp2 = 0.0 - vp2; /* flip to positive */
+
+        *R = (int)round((1.0 - sin(vp2)) * 255.0 * brightness);
+        *G = (int)round(sin(vp2 * 2.0) * 255.0 * brightness);
+        *B = (int)round((1.0 - cos(vp2)) * 255.0 * brightness);
+    }
+}
+
+
 void ctx_to_png(struct render_ctx *ctx, char *name) {
 
     png_bytep image_data = calloc(ctx->img_h * ctx->img_w * 3, sizeof(png_byte));
@@ -734,35 +792,16 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
                     bright_factor = (double)count_in_puzzle / 256.0;
                 }
 
-
-                int neg = 0;
-
                 double log_avg_order = ((double)ctx->grid[o].scaled_log_order /
                                         ((double)ctx->grid[o].count * (double)LOG_SCALE));
 
-                if (log_avg_order < 0) {
-                    neg = 1;
-                    log_avg_order = fabs(log_avg_order);
-                }
+                double v = log_order_to_val(log_avg_order, min_order, max_order);
 
-                double avg_order = exp(log_avg_order);
-                double v = atan2(avg_order - min_order, 1.0) / atan2(max_order - min_order, 1.0);
-                if (v > 1.0) {
-                    v = 1.0;
-                }
+                uint8_t *R = &(image_data[o * 3 + 0]);
+                uint8_t *G = &(image_data[o * 3 + 1]);
+                uint8_t *B = &(image_data[o * 3 + 2]);
 
-                /* delta colors */
-                double vp2 = v * M_PI_2;
-
-                if (neg == 0) {
-                    image_data[o * 3 + 0] = (int)round(sin(vp2) * 255.0 * bright_factor);
-                    image_data[o * 3 + 1] = (int)round((1.0 - sin(vp2 * 2.0)) * 255.0 * bright_factor);
-                    image_data[o * 3 + 2] = (int)round(cos(vp2) * 255.0 * bright_factor);
-                } else {
-                    image_data[o * 3 + 0] = (int)round((1.0 - sin(vp2)) * 255.0 * bright_factor);
-                    image_data[o * 3 + 1] = (int)round(sin(vp2 * 2.0) * 255.0 * bright_factor);
-                    image_data[o * 3 + 2] = (int)round((1.0 - cos(vp2)) * 255.0 * bright_factor);
-                }
+                val_to_rgb(v, R, G, B, bright_factor);
             }
         }
     }
