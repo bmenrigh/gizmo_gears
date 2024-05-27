@@ -17,10 +17,20 @@
 #define LOG_SCALE 0x1000000
 #define GROW_VISITED 1024
 
+#define FPREC_128 0
+/*#define FPREC_64 0*/
+
+#ifdef FPREC_128
 
 #define COMPLEX_T __complex128
 #define FLOAT_T __float128
 #define FLOAT_L(N) (N##Q)
+#define FABS_F(x) (fabsq(x))
+#define CABS_F(x) (cabsq(x))
+#define FSIN_F(x) (sinq(x))
+#define FCOS_F(x) (cosq(x))
+
+#endif
 
 
 struct thread_ctx {
@@ -164,7 +174,7 @@ int point_equal_double(COMPLEX_T p, COMPLEX_T q) {
 
 int point_equal_epsilon(struct render_ctx *ctx, COMPLEX_T p, COMPLEX_T q) {
 
-    if (fabsq(__real__ p - __real__ q) + fabsq(__imag__ p - __imag__ q)  < ctx->epsilon) {
+    if (FABS_F(__real__ p - __real__ q) + FABS_F(__imag__ p - __imag__ q)  < ctx->epsilon) {
         return 1;
     } else {
         return 0;
@@ -178,7 +188,7 @@ int point_in_a(struct render_ctx *ctx, COMPLEX_T p) {
     __real__ np += FLOAT_L(1.0);
 
     /* Check triangle inequality first */
-    if (fabsq(__real__ np) + fabsq(__imag__ np) < ctx->r) {
+    if (FABS_F(__real__ np) + FABS_F(__imag__ np) < ctx->r) {
         return 1;
 
         /* Else check squared pythagorean */
@@ -197,7 +207,7 @@ int point_in_b(struct render_ctx *ctx, COMPLEX_T p) {
     __real__ np -= FLOAT_L(1.0);
 
     /* Check triangle inequality first */
-    if (fabsq(__real__ np) + fabsq(__imag__ np) < ctx->r) {
+    if (FABS_F(__real__ np) + FABS_F(__imag__ np) < ctx->r) {
         return 1;
 
         /* Else check squared pythagorean */
@@ -220,7 +230,7 @@ int xy_on_border(struct render_ctx *ctx, int x, int y) {
     np = p;
     __real__ np += FLOAT_L(1.0);
 
-    dist = (double)cabsq(np);
+    dist = (double)CABS_F(np);
     if ((dist <= (double)ctx->r + (2.0 * ctx->pradius)) && (dist >= (double)ctx->r - (2.0 * ctx->pradius))) {
         return 1;
     }
@@ -229,7 +239,7 @@ int xy_on_border(struct render_ctx *ctx, int x, int y) {
     np = p;
     __real__ np -= FLOAT_L(1.0);
 
-    dist = (double)cabsq(np);
+    dist = (double)CABS_F(np);
     if ((dist <= (double)ctx->r + (2.0 * ctx->pradius)) && (dist >= (double)ctx->r - (2.0 * ctx->pradius))) {
         return 1;
     }
@@ -284,11 +294,11 @@ int point_in_box(struct render_ctx *ctx, COMPLEX_T p) {
 COMPLEX_T turn_a(struct render_ctx *ctx, COMPLEX_T p) {
 
     COMPLEX_T np = p;
-    __real__ np += (FLOAT_T)1;
+    __real__ np += FLOAT_L(1.0);
 
     np *= ctx->rot_a;
 
-    __real__ np -= (FLOAT_T)1;
+    __real__ np -= FLOAT_L(1.0);
 
     return np;
 }
@@ -297,11 +307,11 @@ COMPLEX_T turn_a(struct render_ctx *ctx, COMPLEX_T p) {
 COMPLEX_T turn_b(struct render_ctx *ctx, COMPLEX_T p) {
 
     COMPLEX_T np = p;
-    __real__ np -= (FLOAT_T)1;
+    __real__ np -= FLOAT_L(1.0);
 
     np *= ctx->rot_b;
 
-    __real__ np += (FLOAT_T)1;
+    __real__ np += FLOAT_L(1.0);
 
     return np;
 }
@@ -1029,9 +1039,9 @@ int main (void) {
     /* ctx->ymax = 1.0 * ctx->r; */
 
     /* Render wedge only */
-    double goalh = 1024;
-    double wedge_height = sqrt(ctx->r_sq - 1.0);
-    double wedge_width = ctx->r - 1.0;
+    double goalh = 512;
+    double wedge_height = sqrt((double)ctx->r_sq - 1.0);
+    double wedge_width = (double)ctx->r - 1.0;
     ctx->img_h = (int)floor(goalh);
     ctx->img_w = (int)floor(goalh * (wedge_width / wedge_height));
     ctx->xmin = 0.0 - wedge_width;
@@ -1058,8 +1068,8 @@ int main (void) {
     pthread_mutex_t grid_mutex = PTHREAD_MUTEX_INITIALIZER;
     ctx->grid_mutex = &(grid_mutex);
 
-    __real__ ctx->rot_a = cosq(M_PIq * (FLOAT_L(2.0) / (FLOAT_T)ctx->n));
-    __imag__ ctx->rot_a = sinq(M_PIq * (FLOAT_L(2.0) / (FLOAT_T)ctx->n));
+    __real__ ctx->rot_a = FCOS_F(M_PIq * (FLOAT_L(2.0) / (FLOAT_T)ctx->n));
+    __imag__ ctx->rot_a = FSIN_F(M_PIq * (FLOAT_L(2.0) / (FLOAT_T)ctx->n));
     ctx->rot_b = conjq(ctx->rot_a);
 
     test_xy_point(ctx);
