@@ -28,7 +28,6 @@ struct thread_ctx {
 struct samples {
     uint32_t count;
     int64_t scaled_log_order;
-    /*uint64_t ord_a, ord_b;*/
 };
 
 struct visited_ctx {
@@ -107,8 +106,6 @@ int point_to_xy(struct render_ctx *ctx, __complex128 p, int *x, int *y) {
     double px = (double)(__real__ p);
     double py = (double)(__imag__ p);
 
-    /*fprintf(stderr, "point (x, y): (%.5f, %.5f)\n", px, py);*/
-
     if ((px < ctx->xmin) || (px > ctx->xmax) ||
         (py < ctx->ymin) || (py > ctx->ymax)) {
         return -1;
@@ -162,7 +159,6 @@ int point_equal_double(__complex128 p, __complex128 q) {
 
 int point_equal_epsilon(struct render_ctx *ctx, __complex128 p, __complex128 q) {
 
-    /* if (cabsq(p - q) < ctx->epsilon) { */
     if (fabsq(__real__ p - __real__ q) + fabsq(__imag__ p - __imag__ q)  < ctx->epsilon) {
         return 1;
     } else {
@@ -217,7 +213,7 @@ int xy_on_border(struct render_ctx *ctx, int x, int y) {
 
     /* Check distace to A */
     np = p;
-    __real__ np += (__float128)1;
+    __real__ np += 1.0Q;
 
     dist = (double)cabsq(np);
     if ((dist <= (double)ctx->r + (2.0 * ctx->pradius)) && (dist >= (double)ctx->r - (2.0 * ctx->pradius))) {
@@ -226,7 +222,7 @@ int xy_on_border(struct render_ctx *ctx, int x, int y) {
 
     /* Check distace to B */
     np = p;
-    __real__ np -= (__float128)1;
+    __real__ np -= 1.0Q;
 
     dist = (double)cabsq(np);
     if ((dist <= (double)ctx->r + (2.0 * ctx->pradius)) && (dist >= (double)ctx->r - (2.0 * ctx->pradius))) {
@@ -239,11 +235,20 @@ int xy_on_border(struct render_ctx *ctx, int x, int y) {
 
 int point_in_puzzle(struct render_ctx *ctx, __complex128 p) {
 
-    if ((point_in_a(ctx, p) == 1) || (point_in_b(ctx, p) == 1)) {
-        return 1;
+    int in_a = point_in_a(ctx, p);
+    int in_b = point_in_b(ctx, p);
+
+    if (ctx->wedge_only == 1) {
+        if ((in_a == 1) && (in_b == 1)) {
+            return 1;
+        }
     } else {
-        return 0;
+        if ((in_a == 1) || (in_b == 1)) {
+            return 1;
+        }
     }
+
+    return 0;
 }
 
 
@@ -320,7 +325,7 @@ void add_visited_xy(struct render_ctx *ctx, struct visited_ctx *vctx, int x, int
             vctx->vused += 1;
         } else if (vctx->visited[o] < 32) {
             /* Let visited counter grow as high as 32 per pixel per point sampled */
-            /*vctx->visited[o] =+ 1;*/
+            vctx->visited[o] =+ 1;
         }
     }
 
@@ -345,7 +350,7 @@ void add_visited_xy(struct render_ctx *ctx, struct visited_ctx *vctx, int x, int
             vctx->vused_m += 1;
         } else if (vctx->visited_m[o_m] < 32) {
             /* Let visited counter grow as high as 32 per pixel per point sampled */
-            /*vctx->visited_m[o_m] =+ 1;*/
+            vctx->visited_m[o_m] =+ 1;
         }
     }
 }
@@ -363,62 +368,43 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
     uint32_t count = 0;
     int32_t count_a = 0;
     int32_t count_b = 0;
-    /*int good = 0;*/
     do {
-
-        /*fprintf(stderr, "count %3d; step %d; ina: %d; inb: %d; point (%18.015f, %18.015f)\n", count, step, point_in_a(ctx, p), point_in_b(ctx, p), (double)__real__ p, (double)__imag__ p);*/
 
         if (step == 0) {
 
+            /* Only track before a is done */
+            x = -1;
+            y = -1;
+            x_m = -1;
+            y_m = -1;
+            if (((ctx->wedge_only == 0) && (ctx->box_only == 0)) ||
+                ((ctx->wedge_only == 1) && (point_in_wedge(ctx, p) == 1)) ||
+                ((ctx->box_only == 1) && (point_in_box(ctx, p) == 1))) {
+
+                assert(point_to_xy(ctx, p, &x, &y) == 0);
+            }
+
+            __complex128 p_m;
+            __real__ p_m = 0.0Q - __real__ p;
+            __imag__ p_m = 0.0Q - __imag__ p;
+
+            if (((ctx->wedge_only == 0) && (ctx->box_only == 0)) ||
+                ((ctx->wedge_only == 1) && (point_in_wedge(ctx, p_m) == 1)) ||
+                ((ctx->box_only == 1) && (point_in_box(ctx, p_m) == 1))) {
+
+                assert(point_to_xy(ctx, p_m, &x_m, &y_m) == 0);
+            }
+
+            /* Now add */
+            add_visited_xy(ctx, vctx, x, y, x_m, y_m);
+
+            /* Actually try to do A turn */
             if (point_in_a(ctx, p) == 1) {
-                /* double px = (double)(__real__ p); */
-                /* double py = (double)(__imag__ p); */
-                /* if ((px > -0.11) && (px < 0.11) && */
-                /*     (py > 0.175) && (py < 0.35)) { */
-                /*     good = 1; */
-                /* } */
-
-                /* Only track before a is done */
-                x = -1;
-                y = -1;
-                x_m = -1;
-                y_m = -1;
-                if (((ctx->wedge_only == 0) && (ctx->box_only == 0)) ||
-                    ((ctx->wedge_only == 1) && (point_in_wedge(ctx, p) == 1)) ||
-                    ((ctx->box_only == 1) && (point_in_box(ctx, p) == 1))) {
-
-                    assert(point_to_xy(ctx, p, &x, &y) == 0);
-
-                    /*fprintf(stderr, "count %d point (%.15f, %.15f) at %d, %d\n", count, (double)__real__ p, (double)__imag__ p, x, y);*/
-                }
-
-                __complex128 p_m;
-                __real__ p_m = 0.0Q - __real__ p;
-                __imag__ p_m = 0.0Q - __imag__ p;
-
-                /* double p_mx = (double)(__real__ p_m); */
-                /* double p_my = (double)(__imag__ p_m); */
-                /* if ((p_mx > -0.11) && (p_mx < 0.11) && */
-                /*     (p_my > 0.175) && (p_my < 0.35)) { */
-                /*     good = 1; */
-                /* } */
-
-                if (((ctx->wedge_only == 0) && (ctx->box_only == 0)) ||
-                    ((ctx->wedge_only == 1) && (point_in_wedge(ctx, p_m) == 1)) ||
-                    ((ctx->box_only == 1) && (point_in_box(ctx, p_m) == 1))) {
-
-                    assert(point_to_xy(ctx, p_m, &x_m, &y_m) == 0);
-                }
-
-                /* Now add */
-                add_visited_xy(ctx, vctx, x, y, x_m, y_m);
-
-
-
                 p = turn_a(ctx, p);
                 count_a++;
             }
         } else {
+            /* Try B turn */
             if (point_in_b(ctx, p) == 1) {
                 p = turn_b(ctx, p);
                 count_b++;
@@ -430,10 +416,6 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
 
         if (count > vctx->limit) {
 
-            /* if (good == 0) { */
-            /*     return 0; */
-            /* } */
-
             /* Try to salvage this point if it's extremely close to 0 */
             /* Within one loop around of each other */
             if (abs(count_a - count_b) <= ctx->n) {
@@ -443,9 +425,8 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
                 /*fprintf(stderr, "count over limit assuming 0\n");*/
                 return 0.0; /* Just assume they were equal as a speedup hack */
             } else {
-                /* We didn't try long enough to be sure */
                 /*fprintf(stderr, "count over limit but not at max, returning NAN\n");*/
-                return NAN;
+                return NAN; /* We didn't try long enough to be sure */
             }
 
         }
@@ -453,7 +434,6 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
         if (count % 10000000 == 0) {
             fprintf(stderr, "Done %d turns\n", count);
         }
-
 
         /*
          * Note the condition (step != 0) here is critical for
@@ -492,33 +472,16 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
          */
     } while ((step != 0) || (count < ctx->n) || (point_equal_epsilon(ctx, op, p) != 1));
 
-
-    /* if (good == 0) { */
-    /*     return 0; */
-    /* } */
-    /* regular order */
-    /*return count;*/
-
     /* delta order a/b stuff */
     if ((count_a > 0) && (count_b > 0)) {
 
-        int excess = (((count_a % ctx->n) - (count_b % ctx->n)) + ctx->n) % ctx->n;
+        /* int excess = (((count_a % ctx->n) - (count_b % ctx->n)) + ctx->n) % ctx->n; */
 
-        if (excess != 0) {
-            fprintf(stderr, "point (%.15f, %.15f) with order %d with %d, %d\n", (double)__real__ op, (double)__imag__ op, count, count_a, count_b);
-        }
-
-        /* *ord_a = count_a; */
-        /* *ord_b = count_b; */
-
-        /*fprintf(stderr, "returning log diff\n");*/
-
-        /* if ((count_a ==  66) && ((double)count_a / (double)count_b >= 10)) { */
-        /*fprintf(stderr, "point order %d with %d, %d\n", count, count_a, count_b);*/
-            return (log((double)count_a) - log((double)count_b)); /* log(a/b) */
-        /* } else { */
-        /*     return NAN; */
+        /* if (excess != 0) { */
+        /*     fprintf(stderr, "point (%.15f, %.15f) with order %d with %d, %d\n", (double)__real__ op, (double)__imag__ op, count, count_a, count_b); */
         /* } */
+
+        return (log((double)count_a) - log((double)count_b)); /* log(a/b) */
     } else {
         /*fprintf(stderr, "a or b was zero, returning NAN\n");*/
         return NAN;
@@ -552,9 +515,6 @@ void point_sample(struct render_ctx *ctx, __complex128 p, struct visited_ctx *vc
     /*     __imag__ p = 0.0Q - __imag__ p; */
     /* } */
 
-
-    /* memset(vctx->visited, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t)); */
-    /* memset(vctx->visited_m, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t)); */
     vctx->vused = 0;
     vctx->vused_m = 0;
 
@@ -567,17 +527,6 @@ void point_sample(struct render_ctx *ctx, __complex128 p, struct visited_ctx *vc
         for (int i = 0; i < vctx->vused; i++) {
             int o = xy_to_offset(ctx, vctx->vx[i], vctx->vy[i]);
 
-            /* if (o == xy_to_offset(ctx, 242, 72)) { */
-            /*     if (scaled_ord != 21017875) { */
-            /*         fprintf(stderr, "Adding scaled_log_order %lu to (274, 72) %d times\n", scaled_ord, vctx->visited[o]); */
-            /*         int tx, ty; */
-            /*         point_to_xy(ctx, p, &tx, &ty); */
-            /*         fprintf(stderr, "Offending point %.15f, %.15f pixel (%d, %d)\n", (double)__real__ p, (double)__imag__ p, tx, ty); */
-
-            /*     } */
-            /*     /\*fprintf(stderr, "Adding scaled_log_order %lu to (274, 72) %d times\n", scaled_ord, vctx->visited[o]);*\/ */
-            /* } */
-
             __sync_add_and_fetch(&(ctx->grid[o].count), vctx->visited[o]);
             __sync_add_and_fetch(&(ctx->grid[o].scaled_log_order), scaled_ord * vctx->visited[o]);
 
@@ -587,8 +536,8 @@ void point_sample(struct render_ctx *ctx, __complex128 p, struct visited_ctx *vc
         for (int i = 0; i < vctx->vused_m; i++) {
             int o_m = xy_to_offset(ctx, vctx->vx_m[i], vctx->vy_m[i]);
 
-            /* __sync_add_and_fetch(&(ctx->grid[o_m].count), vctx->visited_m[o_m]); */
-            /* __sync_sub_and_fetch(&(ctx->grid[o_m].scaled_log_order), scaled_ord * vctx->visited_m[o_m]); */
+            __sync_add_and_fetch(&(ctx->grid[o_m].count), vctx->visited_m[o_m]);
+            __sync_sub_and_fetch(&(ctx->grid[o_m].scaled_log_order), scaled_ord * vctx->visited_m[o_m]);
 
             vctx->visited_m[o_m] = 0; /* clear this visit */
         }
@@ -652,34 +601,6 @@ void * image_sample_thread(void *targ) {
     vctx->vused_m = 0;
     vctx->vsize_m = GROW_VISITED;
 
-    /*xy_sample(ctx, 355, 521, 1024, 1, vctx);*/
-    /*xy_sample(ctx, 242, 72, 1024, 1, vctx);*/
-    /*xy_sample(ctx, 243, 72, 1024, 1, vctx);*/
-
-
-    /* xy_sample(ctx, 768, 311, 1024, 3, vctx); */
-
-    /*xy_sample(ctx, 768, 310, 1024, 1, vctx);*/
-    /*xy_sample(ctx, 1000, 1000, 1024, 1, vctx);*/
-
-    /* __complex128 tp1; */
-    /* __real__ tp1 = -0.199466048119580Q; */
-    /* __imag__ tp1 =  0.736370515340612Q; */
-
-    /* point_sample(ctx, tp1, vctx); */
-
-    /* __complex128 tp2; */
-    /* __real__ tp2 = -0.199445936742669Q; */
-    /* __imag__ tp2 =  0.736391888282075Q; */
-
-    /* point_sample(ctx, tp2, vctx); */
-
-    /* __complex128 tp3; */
-    /* __real__ tp3 = -0.210794173119580; */
-    /* __imag__ tp3 =  0.770061921590612; */
-
-    /* point_sample(ctx, tp3, vctx); */
-
     fprintf(stderr, "== SAMPLING BORDER PIXELS ==\n");
     for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
 
@@ -688,21 +609,18 @@ void * image_sample_thread(void *targ) {
         for (int x = 0; x < ctx->img_w; x++) {
 
             if (xy_on_border(ctx, x, y) == 1) {
-                xy_sample(ctx, x, y, 10, 1, vctx);
+                xy_sample(ctx, x, y, 128, 128, vctx);
             }
         }
     }
 
     fprintf(stderr, "== SAMPLING DISC PIXELS ==\n");
-    /*for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {*/
-    for (int x = tctx->tnum; x < ctx->img_w; x += tctx->num_threads) {
-        /*fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);*/
-        fprintf(stderr, "Working on col %d of %d\n", x, ctx->img_w);
+    for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
 
-        /*for (int x = 0; x < ctx->img_w; x++) {*/
-        for (int y = 0; y < ctx->img_h; y++) {
+        fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);
 
-            xy_sample(ctx, x, y, 10, 1, vctx);
+        for (int x = 0; x < ctx->img_w; x++) {
+            xy_sample(ctx, x, y, 32, 4, vctx);
         }
     }
 
@@ -845,15 +763,6 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
                     image_data[o * 3 + 1] = (int)round(sin(vp2 * 2.0) * 255.0 * bright_factor);
                     image_data[o * 3 + 2] = (int)round((1.0 - cos(vp2)) * 255.0 * bright_factor);
                 }
-
-                /* if ((avg_order >= 10.0) && (neg == 0)) { */
-                /*     fprintf(stderr, "Pixel %d, %d sampled %d times with scaled_log_order %ld and avg_order %f, val %f, RGB (%d, %d, %d)\n", x, y, ctx->grid[o].count, ctx->grid[o].scaled_log_order, avg_order, v, image_data[o * 3 + 0], image_data[o * 3 + 1], image_data[o * 3 + 2]); */
-                /* } */
-
-                /* if ((avg_order < 10.0) && (avg_order > 1.0) && (neg == 0)) { */
-                /*     fprintf(stderr, "Pixel %d, %d sampled %d times with scaled_log_order %ld and avg_order %f, val %f, RGB (%d, %d, %d)\n", x, y, ctx->grid[o].count, ctx->grid[o].scaled_log_order, avg_order, v, image_data[o * 3 + 0], image_data[o * 3 + 1], image_data[o * 3 + 2]); */
-                /* } */
-
             }
         }
     }
@@ -872,8 +781,8 @@ int main (void) {
     ctx->r_sq = 2.0Q;
     ctx->epsilon = 1e-16Q;
 
-    ctx->wedge_only = 0;
-    ctx->box_only = 1;
+    ctx->wedge_only = 1;
+    ctx->box_only = 0;
 
     /* Render full puzzle */
     /* double goalw = 1024; */
@@ -886,24 +795,24 @@ int main (void) {
     /* ctx->ymax = 1.0 * ctx->r; */
 
     /* Render wedge only */
-    /* double goalh = 512; */
-    /* double wedge_height = sqrt(ctx->r_sq - 1.0); */
-    /* double wedge_width = ctx->r - 1.0; */
-    /* ctx->img_h = (int)floor(goalh); */
-    /* ctx->img_w = (int)floor(goalh * (wedge_width / wedge_height)); */
-    /* ctx->xmin = 0.0 - wedge_width; */
-    /* ctx->xmax = wedge_width; */
-    /* ctx->ymin = 0.0 - wedge_height; */
-    /* ctx->ymax = wedge_height; */
+    double goalh = 1024;
+    double wedge_height = sqrt(ctx->r_sq - 1.0);
+    double wedge_width = ctx->r - 1.0;
+    ctx->img_h = (int)floor(goalh);
+    ctx->img_w = (int)floor(goalh * (wedge_width / wedge_height));
+    ctx->xmin = 0.0 - wedge_width;
+    ctx->xmax = wedge_width;
+    ctx->ymin = 0.0 - wedge_height;
+    ctx->ymax = wedge_height;
 
     /* Render box only */
-    double goalw = 2048;
-    ctx->xmin = -0.198298374860865 - 0.05;
-    ctx->xmax = -0.198298374860865 + 0.05;
-    ctx->ymin = 0.735207472673922 - 0.05;
-    ctx->ymax = 0.735207472673922 + 0.05;
-    ctx->img_w = (int)floor(goalw);
-    ctx->img_h = (int)floor(goalw / ((ctx->xmax - ctx->xmin) / (ctx->ymax - ctx->ymin)));
+    /* double goalw = 2048; */
+    /* ctx->xmin = -0.198298374860865 - 0.05; */
+    /* ctx->xmax = -0.198298374860865 + 0.05; */
+    /* ctx->ymin = 0.735207472673922 - 0.05; */
+    /* ctx->ymax = 0.735207472673922 + 0.05; */
+    /* ctx->img_w = (int)floor(goalw); */
+    /* ctx->img_h = (int)floor(goalw / ((ctx->xmax - ctx->xmin) / (ctx->ymax - ctx->ymin))); */
 
     ctx->pwidth = (ctx->xmax - ctx->xmin) / (double)ctx->img_w;
     ctx->pheight = (ctx->ymax - ctx->ymin) / (double)ctx->img_h;
