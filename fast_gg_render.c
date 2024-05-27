@@ -483,8 +483,15 @@ double point_order(struct render_ctx *ctx, __complex128 p, struct visited_ctx *v
 
         return (log((double)count_a) - log((double)count_b)); /* log(a/b) */
     } else {
-        /*fprintf(stderr, "a or b was zero, returning NAN\n");*/
-        return NAN;
+
+        if (count_a == (int32_t)ctx->n) {
+            return log((double)count_a);
+        } else if (count_b == (int32_t)ctx->n) {
+            return 0.0 - log((double)count_b);
+        } else {
+            /*fprintf(stderr, "a or b was zero, returning NAN\n");*/
+            return NAN;
+        }
     }
 }
 
@@ -747,7 +754,7 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
         }
     }
 
-    double max_order = 11.0;
+    double max_order = (double)ctx->n;
     double min_order = 1.0;
     /* double max_order = exp(log_max_order); */
     /* double min_order = exp(log_min_order); */
@@ -820,29 +827,29 @@ int main (void) {
     ctx->r_sq = 2.0Q;
     ctx->epsilon = 1e-16Q;
 
-    ctx->wedge_only = 1;
+    ctx->wedge_only = 0;
     ctx->box_only = 0;
 
     /* Render full puzzle */
-    /* double goalw = 1024; */
-    /* double scalef = goalw / ((2.0 * ctx->r) + 2.0); */
-    /* ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef); */
-    /* ctx->img_h = (int)floor(2.0 * ctx->r * scalef); */
-    /* ctx->xmin = -1.0 - ctx->r; */
-    /* ctx->xmax = 1.0 + ctx->r; */
-    /* ctx->ymin = -1.0 * ctx->r; */
-    /* ctx->ymax = 1.0 * ctx->r; */
+    double goalw = 1024;
+    double scalef = goalw / ((2.0 * ctx->r) + 2.0);
+    ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef);
+    ctx->img_h = (int)floor(2.0 * ctx->r * scalef);
+    ctx->xmin = -1.0 - ctx->r;
+    ctx->xmax = 1.0 + ctx->r;
+    ctx->ymin = -1.0 * ctx->r;
+    ctx->ymax = 1.0 * ctx->r;
 
     /* Render wedge only */
-    double goalh = 1024;
-    double wedge_height = sqrt(ctx->r_sq - 1.0);
-    double wedge_width = ctx->r - 1.0;
-    ctx->img_h = (int)floor(goalh);
-    ctx->img_w = (int)floor(goalh * (wedge_width / wedge_height));
-    ctx->xmin = 0.0 - wedge_width;
-    ctx->xmax = wedge_width;
-    ctx->ymin = 0.0 - wedge_height;
-    ctx->ymax = wedge_height;
+    /* double goalh = 1024; */
+    /* double wedge_height = sqrt(ctx->r_sq - 1.0); */
+    /* double wedge_width = ctx->r - 1.0; */
+    /* ctx->img_h = (int)floor(goalh); */
+    /* ctx->img_w = (int)floor(goalh * (wedge_width / wedge_height)); */
+    /* ctx->xmin = 0.0 - wedge_width; */
+    /* ctx->xmax = wedge_width; */
+    /* ctx->ymin = 0.0 - wedge_height; */
+    /* ctx->ymax = wedge_height; */
 
     /* Render box only */
     /* double goalw = 2048; */
