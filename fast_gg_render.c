@@ -567,12 +567,14 @@ double point_order(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx
         /*
          * Note the condition (step != 0) here is critical for
          * correctness.  There are sometimes points that cycle around
-         * back to themselves but they return to their original
-         * position with a finaly A' turn so the next turn would be
-         * B. This is different than how they started which was to
-         * start with the next turn (first turn) being A'.
+         * back to themselves, but they return to their original
+         * position partway through the application of the generator.
+         * For A' B that means they end with a final A' turn (so the
+         * next turn would be B). This is different than how they
+         * started which was to start with the next turn (first turn)
+         * being A'.
          *
-         * This has the effect of causing two points to be measured
+         * This has the effect of causing some points to be measured
          * with two different orders depending on where they happen to
          * be sampled in their orbit.
          *
@@ -586,14 +588,14 @@ double point_order(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx
          * has an order of 216 turns.
          *
          * So if all the points in the orbit of either of these get
-         * labeled with their order then the pixel containing
-         * -0.199445936742669, 0.736391888282075 can recieve two
-         * different colors.
+         * labeled with their order, then the pixel containing
+         * -0.199445936742669, 0.736391888282075 can receive two
+         * different order values.
          *
-         * By enforcing step != 0 to continue the loop points must
+         * By enforcing step != 0 to continue, the loop points must
          * return back to their original spot with the same turn
-         * parity and this causes the order to be measured the same no
-         * matter what point in the orbit is sampled.
+         * parity, and this causes the order to be measured the same
+         * no matter what point in the orbit is sampled.
          *
          * It took me nearly 20 hours over three days to find this
          * bug.
