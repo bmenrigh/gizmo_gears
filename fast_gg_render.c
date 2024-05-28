@@ -30,6 +30,7 @@
 #define CABS_F(x) (cabsq(x))
 #define FSIN_F(x) (sinq(x))
 #define FCOS_F(x) (cosq(x))
+#define PI_L      M_PIq
 #define EPSILON_L FLOAT_L(1e-16)
 
 #endif
@@ -44,6 +45,7 @@
 #define CABS_F(x) (cabs(x))
 #define FSIN_F(x) (sin(x))
 #define FCOS_F(x) (cos(x))
+#define PI_L      M_PI
 #define EPSILON_L FLOAT_L(1e-10)
 
 #endif
@@ -66,7 +68,6 @@ struct visited_ctx {
     uint8_t *visited, *visited_m;
     uint32_t *vx, *vy, *vx_m, *vy_m;
     int32_t vsize, vused, vsize_m, vused_m;
-    uint32_t ord_a, ord_b;
 };
 
 struct render_ctx {
@@ -82,6 +83,8 @@ struct render_ctx {
     pthread_mutex_t *grid_mutex;
     int wedge_only;
     int box_only;
+    int sym180;
+    int order_delta;
 };
 
 
@@ -373,7 +376,7 @@ void convolve_sobel(double *source, double *mag, double *angle, int w, int h, do
 }
 
 
-double log_order_to_val(double log_order, double min_order, double max_order) {
+double delta_log_order_to_val(double log_order, double min_order, double max_order) {
 
     /* Only let exp() operate on positive logs */
     int neg = 0;
@@ -407,6 +410,17 @@ double log_order_to_val(double log_order, double min_order, double max_order) {
     }
 
     return v;
+}
+
+
+double log_order_to_val(double log_order, double min_order, double max_order) {
+
+    double log_min_order = log(min_order);
+    double log_max_order = log(max_order);
+
+    double offset = 2.0; /* TODO: revisit this hack */
+
+    return ((log_order - log_min_order) + offset) / ((log_max_order - log_min_order) + offset);
 }
 
 
@@ -513,15 +527,17 @@ double point_order(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx
                 assert(point_to_xy(ctx, p, &x, &y) == 0);
             }
 
-            COMPLEX_T p_m;
-            __real__ p_m = FLOAT_L(0.0) - __real__ p;
-            __imag__ p_m = FLOAT_L(0.0) - __imag__ p;
+            if (ctx->sym180 == 1) {
+                COMPLEX_T p_m;
+                __real__ p_m = FLOAT_L(0.0) - __real__ p;
+                __imag__ p_m = FLOAT_L(0.0) - __imag__ p;
 
-            if (((ctx->wedge_only == 0) && (ctx->box_only == 0)) ||
-                ((ctx->wedge_only == 1) && (point_in_wedge(ctx, p_m) == 1)) ||
-                ((ctx->box_only == 1) && (point_in_box(ctx, p_m) == 1))) {
+                if (((ctx->wedge_only == 0) && (ctx->box_only == 0)) ||
+                    ((ctx->wedge_only == 1) && (point_in_wedge(ctx, p_m) == 1)) ||
+                    ((ctx->box_only == 1) && (point_in_box(ctx, p_m) == 1))) {
 
-                assert(point_to_xy(ctx, p_m, &x_m, &y_m) == 0);
+                    assert(point_to_xy(ctx, p_m, &x_m, &y_m) == 0);
+                }
             }
 
             /* Now add */
@@ -543,22 +559,7 @@ double point_order(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx
         step ^= 1; /* toggle between a and b */
         count++;
 
-        if (count > vctx->limit) {
 
-            /* Try to salvage this point if it's extremely close to 0 */
-            /* Within one loop around of each other */
-            if (abs(count_a - count_b) <= ctx->n) {
-                /*fprintf(stderr, "Salvaged point at limit\n");*/
-                return 0.0;
-            } else if (count > ORD_LIMIT) {
-                /*fprintf(stderr, "count over limit assuming 0\n");*/
-                return 0.0; /* Just assume they were equal as a speedup hack */
-            } else {
-                /*fprintf(stderr, "count over limit but not at max, returning NAN\n");*/
-                return NAN; /* We didn't try long enough to be sure */
-            }
-
-        }
 
         if (count % 10000000 == 0) {
             fprintf(stderr, "Done %d turns\n", count);
@@ -601,27 +602,57 @@ double point_order(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx
          * bug.
          *
          */
-    } while ((step != 0) || (count < ctx->n) || (point_equal_epsilon(ctx, op, p) != 1));
+    } while ((count < vctx->limit) && ((step != 0) || (count < ctx->n) || (point_equal_epsilon(ctx, op, p) != 1)));
 
-    /* delta order a/b stuff */
-    if ((count_a > 0) && (count_b > 0)) {
+    /* Figure out how to calculate order based on absolute or delta measure */
+    if (ctx->order_delta == 0) {
+        /* absolute order a + b stuff */
 
-        /* int excess = (((count_a % ctx->n) - (count_b % ctx->n)) + ctx->n) % ctx->n; */
-
-        /* if (excess != 0) { */
-        /*     fprintf(stderr, "point (%.15f, %.15f) with order %d with %d, %d\n", (double)__real__ op, (double)__imag__ op, count, count_a, count_b); */
-        /* } */
-
-        return (log((double)count_a) - log((double)count_b)); /* log(a/b) */
-    } else {
-
-        if (count_a == (int32_t)ctx->n) {
-            return log((double)count_a);
-        } else if (count_b == (int32_t)ctx->n) {
-            return 0.0 - log((double)count_b);
-        } else {
-            /*fprintf(stderr, "a or b was zero, returning NAN\n");*/
+        if ((count >= vctx->limit) || (count_a + count_b == 0)) {
             return NAN;
+        }
+
+        return (log((double)(count_a + count_b))); /* log(a + b) */
+
+    } else {
+        /* delta order a/b stuff */
+
+        if (count >= vctx->limit) {
+
+            /* Try to salvage this point if it's extremely close to 0 */
+            /* Within one loop around of each other */
+            if (abs(count_a - count_b) <= ctx->n) {
+                /*fprintf(stderr, "Salvaged point at limit\n");*/
+                return 0.0;
+            } else if (count > ORD_LIMIT) {
+                /*fprintf(stderr, "count over limit assuming 0\n");*/
+                return 0.0; /* Just assume they were equal as a speedup hack */
+            } else {
+                /*fprintf(stderr, "count over limit but not at max, returning NAN\n");*/
+                return NAN; /* We didn't try long enough to be sure */
+            }
+
+        }
+
+        if ((count_a > 0) && (count_b > 0)) {
+
+            /* int excess = (((count_a % ctx->n) - (count_b % ctx->n)) + ctx->n) % ctx->n; */
+
+            /* if (excess != 0) { */
+            /*     fprintf(stderr, "point (%.15f, %.15f) with order %d with %d, %d\n", (double)__real__ op, (double)__imag__ op, count, count_a, count_b); */
+            /* } */
+
+            return (log((double)count_a) - log((double)count_b)); /* log(a/b) */
+        } else {
+
+            if (count_a == (int32_t)ctx->n) {
+                return log((double)count_a);
+            } else if (count_b == (int32_t)ctx->n) {
+                return 0.0 - log((double)count_b);
+            } else {
+                /*fprintf(stderr, "a or b was zero, returning NAN\n");*/
+                return NAN;
+            }
         }
     }
 }
@@ -671,19 +702,23 @@ void point_sample(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx)
             vctx->visited[o] = 0; /* clear this visit */
         }
 
-        for (int i = 0; i < vctx->vused_m; i++) {
-            int o_m = xy_to_offset(ctx, vctx->vx_m[i], vctx->vy_m[i]);
+        if (ctx->sym180 == 1) {
+            for (int i = 0; i < vctx->vused_m; i++) {
+                int o_m = xy_to_offset(ctx, vctx->vx_m[i], vctx->vy_m[i]);
 
-            __sync_add_and_fetch(&(ctx->grid[o_m].count), vctx->visited_m[o_m]);
-            __sync_sub_and_fetch(&(ctx->grid[o_m].scaled_log_order), scaled_ord * vctx->visited_m[o_m]);
+                __sync_add_and_fetch(&(ctx->grid[o_m].count), vctx->visited_m[o_m]);
+                __sync_sub_and_fetch(&(ctx->grid[o_m].scaled_log_order), scaled_ord * vctx->visited_m[o_m]);
 
-            vctx->visited_m[o_m] = 0; /* clear this visit */
+                vctx->visited_m[o_m] = 0; /* clear this visit */
+            }
         }
-
     } else {
         /* Gotta clear visited since we didn't loop */
         memset(vctx->visited, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
-        memset(vctx->visited_m, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
+
+        if (ctx->sym180 == 1) {
+            memset(vctx->visited_m, 0, ctx->img_w * ctx->img_h * sizeof(uint8_t));
+        }
     }
 }
 
@@ -762,90 +797,95 @@ void * image_sample_thread(void *targ) {
         }
     }
 
-    /* fprintf(stderr, "== OVER SAMPLING LOW-ORDER PIXELS ==\n"); */
-    /* vctx->limit = 100000; */
-    /* for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) { */
-    /*     fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h); */
+    fprintf(stderr, "== OVER SAMPLING LOW-ORDER PIXELS ==\n");
+    vctx->limit = 100000;
+    for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
+        fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);
 
-    /*     for (int x = 0; x < ctx->img_w; x++) { */
+        for (int x = 0; x < ctx->img_w; x++) {
 
-    /*         xy_sample(ctx, x, y, 128, 1, vctx); */
-    /*     } */
-    /* } */
+            xy_sample(ctx, x, y, 128, 1, vctx);
+        }
+    }
 
-    /* fprintf(stderr, "== OVER SAMPLING SOBEL EDGE PIXELS ==\n"); */
-    /* double max_order = (double)ctx->n; */
-    /* double min_order = 1.0; */
+    fprintf(stderr, "== OVER SAMPLING SOBEL EDGE PIXELS ==\n");
+    double max_order = (double)ctx->n;
+    double min_order = 1.0;
 
-    /* double *vgrid = calloc(ctx->img_h * ctx->img_w, sizeof(double)); */
-    /* double *vsobel_mag = calloc(ctx->img_h * ctx->img_w, sizeof(double)); */
-    /* double *vsobel_ang = calloc(ctx->img_h * ctx->img_w, sizeof(double)); */
+    double *vgrid = calloc(ctx->img_h * ctx->img_w, sizeof(double));
+    double *vsobel_mag = calloc(ctx->img_h * ctx->img_w, sizeof(double));
+    double *vsobel_ang = calloc(ctx->img_h * ctx->img_w, sizeof(double));
 
-    /* /\* Fill in the vgrid with vals for each pixel *\/ */
-    /* for (int y = 0; y < ctx->img_h; y++) { */
-    /*     for (int x = 0; x < ctx->img_w; x++) { */
+    /* Fill in the vgrid with vals for each pixel */
+    for (int y = 0; y < ctx->img_h; y++) {
+        for (int x = 0; x < ctx->img_w; x++) {
 
-    /*         int o = xy_to_offset(ctx, x, y); */
+            int o = xy_to_offset(ctx, x, y);
 
-    /*         if (ctx->grid[o].count > 0) { */
+            if (ctx->grid[o].count > 0) {
 
-    /*             double log_avg_order = ((double)ctx->grid[o].scaled_log_order / */
-    /*                                     ((double)ctx->grid[o].count * (double)LOG_SCALE)); */
+                double log_avg_order = ((double)ctx->grid[o].scaled_log_order /
+                                        ((double)ctx->grid[o].count * (double)LOG_SCALE));
 
-    /*             double v = log_order_to_val(log_avg_order, min_order, max_order); */
+                double v;
+                if (ctx->order_delta == 0) {
+                    v = log_order_to_val(log_avg_order, min_order, max_order);
+                } else {
+                    v = delta_log_order_to_val(log_avg_order, min_order, max_order);
+                }
 
-    /*             vgrid[o] = v; */
-    /*         } */
-    /*     } */
-    /* } */
+                vgrid[o] = v;
+            }
+        }
+    }
 
-    /* /\* Run sobel filter on vgrid *\/ */
-    /* convolve_sobel(vgrid, vsobel_mag, vsobel_ang, ctx->img_w, ctx->img_h, 0.0); */
+    /* Run sobel filter on vgrid */
+    convolve_sobel(vgrid, vsobel_mag, vsobel_ang, ctx->img_w, ctx->img_h, 0.0);
 
-    /* /\* normalize magnitudes back into [-1, 1] *\/ */
-    /* /\* first find max maginutude *\/ */
-    /* double max_mag = 1.0; */
-    /* for (int y = 0; y < ctx->img_h; y++) { */
-    /*     for (int x = 0; x < ctx->img_w; x++) { */
+    /* normalize magnitudes back into [-1, 1] */
+    /* first find max maginutude */
+    double max_mag = 1.0;
+    for (int y = 0; y < ctx->img_h; y++) {
+        for (int x = 0; x < ctx->img_w; x++) {
 
-    /*         int o = xy_to_offset(ctx, x, y); */
+            int o = xy_to_offset(ctx, x, y);
 
-    /*         if (fabs(vsobel_mag[o]) > max_mag) { */
-    /*             max_mag = fabs(vsobel_mag[o]); */
-    /*         } */
-    /*     } */
-    /* } */
+            if (fabs(vsobel_mag[o]) > max_mag) {
+                max_mag = fabs(vsobel_mag[o]);
+            }
+        }
+    }
 
-    /* /\* now scale down by max *\/ */
-    /* for (int y = 0; y < ctx->img_h; y++) { */
-    /*     for (int x = 0; x < ctx->img_w; x++) { */
+    /* now scale down by max */
+    for (int y = 0; y < ctx->img_h; y++) {
+        for (int x = 0; x < ctx->img_w; x++) {
 
-    /*         int o = xy_to_offset(ctx, x, y); */
+            int o = xy_to_offset(ctx, x, y);
 
-    /*         vsobel_mag[o] /= max_mag; */
-    /*     } */
-    /* } */
+            vsobel_mag[o] /= max_mag;
+        }
+    }
 
-    /* /\* Use the sobel filter magnitude to select pixels for */
-    /*  * sampling to make sure edges have enough samples */
-    /*  *\/ */
-    /* for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) { */
+    /* Use the sobel filter magnitude to select pixels for
+     * sampling to make sure edges have enough samples
+     */
+    for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
 
-    /*     fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h); */
+        fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);
 
-    /*     for (int x = 0; x < ctx->img_w; x++) { */
+        for (int x = 0; x < ctx->img_w; x++) {
 
-    /*         int o = xy_to_offset(ctx, x, y); */
-    /*         int amt = (int)(128.0 * fabs(vsobel_mag[o])); */
+            int o = xy_to_offset(ctx, x, y);
+            int amt = (int)(128.0 * fabs(vsobel_mag[o]));
 
-    /*         xy_sample(ctx, x, y, 128, amt, vctx); */
-    /*     } */
-    /* } */
+            xy_sample(ctx, x, y, 128, amt, vctx);
+        }
+    }
 
 
-    /* free(vgrid); */
-    /* free(vsobel_mag); */
-    /* free(vsobel_ang); */
+    free(vgrid);
+    free(vsobel_mag);
+    free(vsobel_ang);
 
     free(vctx->visited);
     free(vctx->visited_m);
@@ -901,10 +941,17 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
         }
     }
 
-    double max_order = (double)ctx->n;
-    double min_order = 1.0;
-    /* double max_order = exp(log_max_order); */
-    /* double min_order = exp(log_min_order); */
+    double max_order;
+    double min_order;
+
+    if (ctx->order_delta == 0) {
+        max_order = exp(log_max_order);
+        min_order = exp(log_min_order);
+    } else {
+        max_order = (double)ctx->n;
+        min_order = 1.0;
+    }
+
     fprintf(stderr, "log min: %f; min: %f\n", log_min_order, min_order);
     fprintf(stderr, "log max: %f; max: %f\n", log_max_order, max_order);
 
@@ -923,7 +970,12 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
                 double log_avg_order = ((double)ctx->grid[o].scaled_log_order /
                                         ((double)ctx->grid[o].count * (double)LOG_SCALE));
 
-                double v = log_order_to_val(log_avg_order, min_order, max_order);
+                double v;
+                if (ctx->order_delta == 0) {
+                    v = log_order_to_val(log_avg_order, min_order, max_order);
+                } else {
+                    v = delta_log_order_to_val(log_avg_order, min_order, max_order);
+                }
 
                 vgrid[o] = v;
             }
@@ -1020,9 +1072,15 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
 int main (void) {
 
     struct render_ctx *ctx = calloc(1, sizeof(struct render_ctx));
-    ctx->n = 12;
-    ctx->r = sqrtq(FLOAT_L(2.0));
-    ctx->r_sq = FLOAT_L(2.0);
+    ctx->n = 7;
+    ctx->r = FLOAT_L(1.62357492692335958);
+    ctx->r_sq = ctx->r * ctx->r;
+    ctx->sym180 = 0;
+
+    /* ctx->n = 12; */
+    /* ctx->r = sqrtq(FLOAT_L(2.0)); */
+    /* ctx->r_sq = FLOAT_L(2.0); */
+    /* ctx->sym180 = 1; */
 
     /* n=12 critical radius */
     /* https://twistypuzzles.com/forum/viewtopic.php?t=25752&hilit=gizmo+gears+critical+radius&start=600 */
@@ -1045,6 +1103,7 @@ int main (void) {
 
     ctx->wedge_only = 1;
     ctx->box_only = 0;
+    ctx->order_delta = 0;
 
     /* Render full puzzle */
     /* double goalw = 1024; */
@@ -1057,7 +1116,7 @@ int main (void) {
     /* ctx->ymax = 1.0 * ctx->r; */
 
     /* Render wedge only */
-    double goalh = 8192;
+    double goalh = 1024;
     double wedge_height = sqrt((double)ctx->r_sq - 1.0);
     double wedge_width = (double)ctx->r - 1.0;
     ctx->img_h = (int)floor(goalh);
@@ -1086,9 +1145,18 @@ int main (void) {
     pthread_mutex_t grid_mutex = PTHREAD_MUTEX_INITIALIZER;
     ctx->grid_mutex = &(grid_mutex);
 
-    __real__ ctx->rot_a = FCOS_F(M_PIq * (FLOAT_L(2.0) / (FLOAT_T)ctx->n));
-    __imag__ ctx->rot_a = FSIN_F(M_PIq * (FLOAT_L(2.0) / (FLOAT_T)ctx->n));
-    ctx->rot_b = conjq(ctx->rot_a);
+    /* A' B generator */
+    /* __real__ ctx->rot_a = FCOS_F(PI_L * (FLOAT_L(2.0) / (FLOAT_T)ctx->n)); */
+    /* __imag__ ctx->rot_a = FSIN_F(PI_L * (FLOAT_L(2.0) / (FLOAT_T)ctx->n)); */
+    /* ctx->rot_b = conjq(ctx->rot_a); */
+
+    /* A^4 B generator */
+    __real__ ctx->rot_a = FCOS_F(PI_L * ((FLOAT_L(2.0) * FLOAT_L(4.0)) / (FLOAT_T)ctx->n));
+    __imag__ ctx->rot_a = FSIN_F(PI_L * ((FLOAT_L(2.0) * FLOAT_L(4.0)) / (FLOAT_T)ctx->n));
+
+    __real__ ctx->rot_b = FCOS_F(PI_L * (FLOAT_L(-2.0) / (FLOAT_T)ctx->n));
+    __imag__ ctx->rot_b = FSIN_F(PI_L * (FLOAT_L(-2.0) / (FLOAT_T)ctx->n));
+
 
     test_xy_point(ctx);
 
