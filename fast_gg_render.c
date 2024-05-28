@@ -5,6 +5,7 @@
 #include <inttypes.h>
 #include <math.h>
 #include <quadmath.h>
+#include <complex.h>
 #include <assert.h>
 #include <setjmp.h>
 #include <pthread.h>
@@ -13,12 +14,12 @@
 
 
 #define ORD_LIMIT (20 * 1000 * 1000)
-#define NUM_THREADS 24
+#define NUM_THREADS 12
 #define LOG_SCALE 0x1000000
 #define GROW_VISITED 1024
 
-#define FPREC_128 0
-/*#define FPREC_64 0*/
+/*#define FPREC_128 0*/
+#define FPREC_64 0
 
 #ifdef FPREC_128
 
@@ -29,6 +30,21 @@
 #define CABS_F(x) (cabsq(x))
 #define FSIN_F(x) (sinq(x))
 #define FCOS_F(x) (cosq(x))
+#define EPSILON_L FLOAT_L(1e-16)
+
+#endif
+
+
+#ifdef FPREC_64
+
+#define COMPLEX_T _Complex double
+#define FLOAT_T double
+#define FLOAT_L(N) (N)
+#define FABS_F(x) (fabs(x))
+#define CABS_F(x) (cabs(x))
+#define FSIN_F(x) (sin(x))
+#define FCOS_F(x) (cos(x))
+#define EPSILON_L FLOAT_L(1e-10)
 
 #endif
 
@@ -729,7 +745,7 @@ void * image_sample_thread(void *targ) {
         for (int x = 0; x < ctx->img_w; x++) {
 
             if (xy_on_border(ctx, x, y) == 1) {
-                xy_sample(ctx, x, y, 128, 128, vctx);
+                xy_sample(ctx, x, y, 256, 256, vctx);
             }
         }
     }
@@ -755,79 +771,79 @@ void * image_sample_thread(void *targ) {
     /*     } */
     /* } */
 
-    fprintf(stderr, "== OVER SAMPLING SOBEL EDGE PIXELS ==\n");
-    double max_order = (double)ctx->n;
-    double min_order = 1.0;
+    /* fprintf(stderr, "== OVER SAMPLING SOBEL EDGE PIXELS ==\n"); */
+    /* double max_order = (double)ctx->n; */
+    /* double min_order = 1.0; */
 
-    double *vgrid = calloc(ctx->img_h * ctx->img_w, sizeof(double));
-    double *vsobel_mag = calloc(ctx->img_h * ctx->img_w, sizeof(double));
-    double *vsobel_ang = calloc(ctx->img_h * ctx->img_w, sizeof(double));
+    /* double *vgrid = calloc(ctx->img_h * ctx->img_w, sizeof(double)); */
+    /* double *vsobel_mag = calloc(ctx->img_h * ctx->img_w, sizeof(double)); */
+    /* double *vsobel_ang = calloc(ctx->img_h * ctx->img_w, sizeof(double)); */
 
-    /* Fill in the vgrid with vals for each pixel */
-    for (int y = 0; y < ctx->img_h; y++) {
-        for (int x = 0; x < ctx->img_w; x++) {
+    /* /\* Fill in the vgrid with vals for each pixel *\/ */
+    /* for (int y = 0; y < ctx->img_h; y++) { */
+    /*     for (int x = 0; x < ctx->img_w; x++) { */
 
-            int o = xy_to_offset(ctx, x, y);
+    /*         int o = xy_to_offset(ctx, x, y); */
 
-            if (ctx->grid[o].count > 0) {
+    /*         if (ctx->grid[o].count > 0) { */
 
-                double log_avg_order = ((double)ctx->grid[o].scaled_log_order /
-                                        ((double)ctx->grid[o].count * (double)LOG_SCALE));
+    /*             double log_avg_order = ((double)ctx->grid[o].scaled_log_order / */
+    /*                                     ((double)ctx->grid[o].count * (double)LOG_SCALE)); */
 
-                double v = log_order_to_val(log_avg_order, min_order, max_order);
+    /*             double v = log_order_to_val(log_avg_order, min_order, max_order); */
 
-                vgrid[o] = v;
-            }
-        }
-    }
+    /*             vgrid[o] = v; */
+    /*         } */
+    /*     } */
+    /* } */
 
-    /* Run sobel filter on vgrid */
-    convolve_sobel(vgrid, vsobel_mag, vsobel_ang, ctx->img_w, ctx->img_h, 0.0);
+    /* /\* Run sobel filter on vgrid *\/ */
+    /* convolve_sobel(vgrid, vsobel_mag, vsobel_ang, ctx->img_w, ctx->img_h, 0.0); */
 
-    /* normalize magnitudes back into [-1, 1] */
-    /* first find max maginutude */
-    double max_mag = 1.0;
-    for (int y = 0; y < ctx->img_h; y++) {
-        for (int x = 0; x < ctx->img_w; x++) {
+    /* /\* normalize magnitudes back into [-1, 1] *\/ */
+    /* /\* first find max maginutude *\/ */
+    /* double max_mag = 1.0; */
+    /* for (int y = 0; y < ctx->img_h; y++) { */
+    /*     for (int x = 0; x < ctx->img_w; x++) { */
 
-            int o = xy_to_offset(ctx, x, y);
+    /*         int o = xy_to_offset(ctx, x, y); */
 
-            if (fabs(vsobel_mag[o]) > max_mag) {
-                max_mag = fabs(vsobel_mag[o]);
-            }
-        }
-    }
+    /*         if (fabs(vsobel_mag[o]) > max_mag) { */
+    /*             max_mag = fabs(vsobel_mag[o]); */
+    /*         } */
+    /*     } */
+    /* } */
 
-    /* now scale down by max */
-    for (int y = 0; y < ctx->img_h; y++) {
-        for (int x = 0; x < ctx->img_w; x++) {
+    /* /\* now scale down by max *\/ */
+    /* for (int y = 0; y < ctx->img_h; y++) { */
+    /*     for (int x = 0; x < ctx->img_w; x++) { */
 
-            int o = xy_to_offset(ctx, x, y);
+    /*         int o = xy_to_offset(ctx, x, y); */
 
-            vsobel_mag[o] /= max_mag;
-        }
-    }
+    /*         vsobel_mag[o] /= max_mag; */
+    /*     } */
+    /* } */
 
-    /* Use the sobel filter magnitude to select pixels for
-     * sampling to make sure edges have enough samples
-     */
-    for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
+    /* /\* Use the sobel filter magnitude to select pixels for */
+    /*  * sampling to make sure edges have enough samples */
+    /*  *\/ */
+    /* for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) { */
 
-        fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);
+    /*     fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h); */
 
-        for (int x = 0; x < ctx->img_w; x++) {
+    /*     for (int x = 0; x < ctx->img_w; x++) { */
 
-            int o = xy_to_offset(ctx, x, y);
-            int amt = (int)(128.0 * fabs(vsobel_mag[o]));
+    /*         int o = xy_to_offset(ctx, x, y); */
+    /*         int amt = (int)(128.0 * fabs(vsobel_mag[o])); */
 
-            xy_sample(ctx, x, y, 128, amt, vctx);
-        }
-    }
+    /*         xy_sample(ctx, x, y, 128, amt, vctx); */
+    /*     } */
+    /* } */
 
 
-    free(vgrid);
-    free(vsobel_mag);
-    free(vsobel_ang);
+    /* free(vgrid); */
+    /* free(vsobel_mag); */
+    /* free(vsobel_ang); */
 
     free(vctx->visited);
     free(vctx->visited_m);
@@ -1022,8 +1038,8 @@ int main (void) {
     /* ctx->r_sq = 1.6180339887Q; */
     /* ctx->r = sqrtq(ctx->r_sq); */
 
-
-    ctx->epsilon = FLOAT_L(1e-16);
+    /*ctx->epsilon = FLOAT_L(1e-16);*/
+    ctx->epsilon = EPSILON_L;
 
     ctx->wedge_only = 1;
     ctx->box_only = 0;
@@ -1039,7 +1055,7 @@ int main (void) {
     /* ctx->ymax = 1.0 * ctx->r; */
 
     /* Render wedge only */
-    double goalh = 512;
+    double goalh = 32768;
     double wedge_height = sqrt((double)ctx->r_sq - 1.0);
     double wedge_width = (double)ctx->r - 1.0;
     ctx->img_h = (int)floor(goalh);
