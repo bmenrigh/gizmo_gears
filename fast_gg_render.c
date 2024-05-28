@@ -37,7 +37,7 @@
 
 #ifdef FPREC_64
 
-#define COMPLEX_T _Complex double
+#define COMPLEX_T complex
 #define FLOAT_T double
 #define FLOAT_L(N) (N)
 #define FABS_F(x) (fabs(x))
@@ -1057,7 +1057,7 @@ int main (void) {
     /* ctx->ymax = 1.0 * ctx->r; */
 
     /* Render wedge only */
-    double goalh = 32768;
+    double goalh = 8192;
     double wedge_height = sqrt((double)ctx->r_sq - 1.0);
     double wedge_width = (double)ctx->r - 1.0;
     ctx->img_h = (int)floor(goalh);
