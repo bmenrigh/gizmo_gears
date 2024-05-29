@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 #include <inttypes.h>
 #include <math.h>
@@ -88,6 +89,7 @@ struct render_ctx {
     int box_only;
     int sym180;
     int order_delta;
+    uint64_t highest_order;
 };
 
 
@@ -670,21 +672,33 @@ double point_order(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx
          */
     } while ((count < vctx->limit) && ((step != 0) || (count < ctx->n) || (point_equal_epsilon(ctx, op, p) != 1)));
 
+    uint64_t order_sum = count_a + count_b;
+    uint64_t max_order = __atomic_load_n(&(ctx->highest_order), __ATOMIC_RELAXED);
+
+    if (order_sum > max_order) {
+
+        fprintf(stderr, "New max order of %lu found for point (%.15f, %.15f)\n", order_sum, (double)__real__ op, (double)__imag__ op);
+    }
+
+    /* Now write new order back into highest_seen atomically */
+    while ((order_sum > max_order) && (__atomic_compare_exchange_n(&(ctx->highest_order), &max_order, order_sum, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED) == true));
+
+
     /* Figure out how to calculate order based on absolute or delta measure */
     if (ctx->order_delta == 0) {
         /* absolute order a + b stuff */
 
         if (count >= vctx->limit) {
 
-            fprintf(stderr, "point (%.15f, %.15f) hit limit with order %d\n", (double)__real__ op, (double)__imag__ op, count_a + count_b);
+            fprintf(stderr, "point (%.15f, %.15f) hit limit with order %lu\n", (double)__real__ op, (double)__imag__ op, order_sum);
 
             return NAN;
         }
-        if (count_a + count_b == 0) {
+        if (order_sum == 0) {
             return NAN;
         }
 
-        return (log((double)(count_a + count_b))); /* log(a + b) */
+        return (log((double)(order_sum))); /* log(a + b) */
 
     } else {
         /* delta order a/b stuff */
@@ -1148,6 +1162,17 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
 int main (void) {
 
     struct render_ctx *ctx = calloc(1, sizeof(struct render_ctx));
+
+    ctx->highest_order = 0;
+    ctx->epsilon = EPSILON_L;
+
+    pthread_mutex_t grid_mutex = PTHREAD_MUTEX_INITIALIZER;
+    ctx->grid_mutex = &(grid_mutex);
+
+    ctx->wedge_only = 0;
+    ctx->box_only = 1;
+    ctx->order_delta = 0;
+
     ctx->n = 7;
     ctx->r = FLOAT_L(1.62357492692335958);
     ctx->r_sq = ctx->r * ctx->r;
@@ -1174,12 +1199,6 @@ int main (void) {
     /* ctx->r_sq = 1.6180339887Q; */
     /* ctx->r = sqrtq(ctx->r_sq); */
 
-    /*ctx->epsilon = FLOAT_L(1e-16);*/
-    ctx->epsilon = EPSILON_L;
-
-    ctx->wedge_only = 0;
-    ctx->box_only = 1;
-    ctx->order_delta = 0;
 
     /* Render full puzzle */
     /* double goalw = 1024; */
@@ -1218,8 +1237,6 @@ int main (void) {
     ctx->pradius = sqrt(pow(ctx->half_pwidth, 2.0) + pow(ctx->half_pheight, 2.0));
     ctx->grid = calloc(ctx->img_w * ctx->img_h, sizeof(struct samples));
 
-    pthread_mutex_t grid_mutex = PTHREAD_MUTEX_INITIALIZER;
-    ctx->grid_mutex = &(grid_mutex);
 
     /* A' B generator */
     /* __real__ ctx->rot_a = FCOS_F(PI_L * (FLOAT_L(2.0) / (FLOAT_T)ctx->n)); */
@@ -1227,10 +1244,10 @@ int main (void) {
     /* ctx->rot_b = conjq(ctx->rot_a); */
 
     /* A^-4 B generator */
-    ctx->gen_len = 2;
+    /* ctx->gen_len = 2; */
 
-    ctx->rot[0] = turn_angle(ctx, -4);
-    ctx->rot[1] = turn_angle(ctx, 1);
+    /* ctx->rot[0] = turn_angle(ctx, -4); */
+    /* ctx->rot[1] = turn_angle(ctx, 1); */
 
     /* n=7 generator that seems to jumble */
     /* ctx->gen_len = 4; */
@@ -1241,12 +1258,12 @@ int main (void) {
     /* ctx->rot[3] = turn_angle(ctx, 4); */
 
     /* n=7 experiment */
-    /* ctx->gen_len = 4; */
+    ctx->gen_len = 4;
 
-    /* ctx->rot[0] = turn_angle(ctx, 2); */
-    /* ctx->rot[1] = turn_angle(ctx, 2); */
-    /* ctx->rot[2] = turn_angle(ctx, 3); */
-    /* ctx->rot[3] = turn_angle(ctx, 3); */
+    ctx->rot[0] = turn_angle(ctx, 2);
+    ctx->rot[1] = turn_angle(ctx, 2);
+    ctx->rot[2] = turn_angle(ctx, 3);
+    ctx->rot[3] = turn_angle(ctx, 3);
 
 
 
