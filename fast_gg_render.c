@@ -13,13 +13,15 @@
 #include <png.h>
 
 
-#define ORD_LIMIT (20 * 1000 * 1000)
-#define NUM_THREADS 12
-#define LOG_SCALE 0x1000000
+#define ORD_LIMIT    (1000 * 1000 * 1000)
+#define NUM_THREADS  12
+#define LOG_SCALE    0x1000000
 #define GROW_VISITED 1024
+#define MAX_GEN_LEN  8
 
-/*#define FPREC_128 0*/
-#define FPREC_64 0
+
+#define FPREC_128 0
+/*#define FPREC_64 0*/
 
 #ifdef FPREC_128
 
@@ -77,7 +79,8 @@ struct render_ctx {
     int img_w, img_h;
     double xmin, xmax, ymin, ymax;
     double pwidth, pheight, half_pwidth, half_pheight, pradius;
-    COMPLEX_T rot_a, rot_b;
+    COMPLEX_T rot[MAX_GEN_LEN]; /* alternates a, b, a, b, ... */
+    int gen_len;
     FLOAT_T epsilon;
     struct samples *grid;
     pthread_mutex_t *grid_mutex;
@@ -127,6 +130,17 @@ void write_png_file(char *filename, int width, int height, png_bytep image_data)
   fclose(fp);
 
   png_destroy_write_struct(&png, &info);
+}
+
+
+COMPLEX_T turn_angle(struct render_ctx *ctx, int amt) {
+
+    COMPLEX_T rot_ang;
+
+    __real__ rot_ang = FCOS_F(PI_L * FLOAT_L(-2.0) * ((FLOAT_T)amt / (FLOAT_T)ctx->n));
+    __imag__ rot_ang = FSIN_F(PI_L * FLOAT_L(-2.0) * ((FLOAT_T)amt / (FLOAT_T)ctx->n));
+
+    return rot_ang;
 }
 
 
@@ -213,6 +227,32 @@ int point_in_a(struct render_ctx *ctx, COMPLEX_T p) {
         /* Else check squared pythagorean */
     } else if (((__real__ np) * (__real__ np)) +
                 ((__imag__ np) * (__imag__ np)) < ctx->r_sq) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+
+int point_in_n(struct render_ctx *ctx, COMPLEX_T p, int n) {
+
+    COMPLEX_T np = p;
+
+    if ((n & 1) == 0) {
+        /* an A check */
+        __real__ np += FLOAT_L(1.0);
+    } else {
+        /* a B check */
+        __real__ np -= FLOAT_L(1.0);
+    }
+
+    /* Check triangle inequality first */
+    if (FABS_F(__real__ np) + FABS_F(__imag__ np) < ctx->r) {
+        return 1;
+
+        /* Else check squared pythagorean */
+    } else if (((__real__ np) * (__real__ np)) +
+               ((__imag__ np) * (__imag__ np)) < ctx->r_sq) {
         return 1;
     } else {
         return 0;
@@ -315,7 +355,7 @@ COMPLEX_T turn_a(struct render_ctx *ctx, COMPLEX_T p) {
     COMPLEX_T np = p;
     __real__ np += FLOAT_L(1.0);
 
-    np *= ctx->rot_a;
+    np *= ctx->rot[0];
 
     __real__ np -= FLOAT_L(1.0);
 
@@ -328,9 +368,34 @@ COMPLEX_T turn_b(struct render_ctx *ctx, COMPLEX_T p) {
     COMPLEX_T np = p;
     __real__ np -= FLOAT_L(1.0);
 
-    np *= ctx->rot_b;
+    np *= ctx->rot[1];
 
     __real__ np += FLOAT_L(1.0);
+
+    return np;
+}
+
+
+COMPLEX_T turn_n(struct render_ctx *ctx, COMPLEX_T p, int n) {
+
+    COMPLEX_T np = p;
+    if ((n & 1) == 0) {
+        /* an A turn */
+
+        __real__ np += FLOAT_L(1.0);
+
+        np *= ctx->rot[n];
+
+        __real__ np -= FLOAT_L(1.0);
+    } else {
+        /* a B turn */
+
+        __real__ np -= FLOAT_L(1.0);
+
+        np *= ctx->rot[n];
+
+        __real__ np += FLOAT_L(1.0);
+    }
 
     return np;
 }
@@ -542,21 +607,22 @@ double point_order(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx
 
             /* Now add */
             add_visited_xy(ctx, vctx, x, y, x_m, y_m);
+        }
 
-            /* Actually try to do A turn */
-            if (point_in_a(ctx, p) == 1) {
-                p = turn_a(ctx, p);
+        /* Try to do turn */
+        if (point_in_n(ctx, p, step) == 1) {
+            p = turn_n(ctx, p, step);
+
+            if ((step & 1) == 0) {
                 count_a++;
-            }
-        } else {
-            /* Try B turn */
-            if (point_in_b(ctx, p) == 1) {
-                p = turn_b(ctx, p);
+            } else {
                 count_b++;
             }
         }
 
-        step ^= 1; /* toggle between a and b */
+        /*step ^= 1;*/ /* toggle between a and b */
+        step = (step + 1) % ctx->gen_len;
+
         count++;
 
 
@@ -608,7 +674,13 @@ double point_order(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx
     if (ctx->order_delta == 0) {
         /* absolute order a + b stuff */
 
-        if ((count >= vctx->limit) || (count_a + count_b == 0)) {
+        if (count >= vctx->limit) {
+
+            fprintf(stderr, "point (%.15f, %.15f) hit limit with order %d\n", (double)__real__ op, (double)__imag__ op, count_a + count_b);
+
+            return NAN;
+        }
+        if (count_a + count_b == 0) {
             return NAN;
         }
 
@@ -773,6 +845,10 @@ void * image_sample_thread(void *targ) {
 
     vctx->vused_m = 0;
     vctx->vsize_m = GROW_VISITED;
+
+    /* for (int i = 0; i < 1000; i++) { */
+    /*     xy_sample(ctx, 2395, 1673, 1000, 1000, vctx); */
+    /* } */
 
     fprintf(stderr, "== SAMPLING BORDER PIXELS ==\n");
     for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
@@ -1101,8 +1177,8 @@ int main (void) {
     /*ctx->epsilon = FLOAT_L(1e-16);*/
     ctx->epsilon = EPSILON_L;
 
-    ctx->wedge_only = 1;
-    ctx->box_only = 0;
+    ctx->wedge_only = 0;
+    ctx->box_only = 1;
     ctx->order_delta = 0;
 
     /* Render full puzzle */
@@ -1116,7 +1192,7 @@ int main (void) {
     /* ctx->ymax = 1.0 * ctx->r; */
 
     /* Render wedge only */
-    double goalh = 1024;
+    double goalh = 2048;
     double wedge_height = sqrt((double)ctx->r_sq - 1.0);
     double wedge_width = (double)ctx->r - 1.0;
     ctx->img_h = (int)floor(goalh);
@@ -1127,11 +1203,11 @@ int main (void) {
     ctx->ymax = wedge_height;
 
     /* Render box only */
-    /* double goalw = 2048; */
-    /* ctx->xmin = -0.198298374860865 - 0.05; */
-    /* ctx->xmax = -0.198298374860865 + 0.05; */
-    /* ctx->ymin = 0.735207472673922 - 0.05; */
-    /* ctx->ymax = 0.735207472673922 + 0.05; */
+    /* double goalw = 4096; */
+    /* ctx->xmin = -0.1; */
+    /* ctx->xmax = 0.0; */
+    /* ctx->ymin = -0.1; */
+    /* ctx->ymax = 0.0; */
     /* ctx->img_w = (int)floor(goalw); */
     /* ctx->img_h = (int)floor(goalw / ((ctx->xmax - ctx->xmin) / (ctx->ymax - ctx->ymin))); */
 
@@ -1150,12 +1226,28 @@ int main (void) {
     /* __imag__ ctx->rot_a = FSIN_F(PI_L * (FLOAT_L(2.0) / (FLOAT_T)ctx->n)); */
     /* ctx->rot_b = conjq(ctx->rot_a); */
 
-    /* A^4 B generator */
-    __real__ ctx->rot_a = FCOS_F(PI_L * ((FLOAT_L(2.0) * FLOAT_L(4.0)) / (FLOAT_T)ctx->n));
-    __imag__ ctx->rot_a = FSIN_F(PI_L * ((FLOAT_L(2.0) * FLOAT_L(4.0)) / (FLOAT_T)ctx->n));
+    /* A^-4 B generator */
+    ctx->gen_len = 2;
 
-    __real__ ctx->rot_b = FCOS_F(PI_L * (FLOAT_L(-2.0) / (FLOAT_T)ctx->n));
-    __imag__ ctx->rot_b = FSIN_F(PI_L * (FLOAT_L(-2.0) / (FLOAT_T)ctx->n));
+    ctx->rot[0] = turn_angle(ctx, -4);
+    ctx->rot[1] = turn_angle(ctx, 1);
+
+    /* n=7 generator that seems to jumble */
+    /* ctx->gen_len = 4; */
+
+    /* ctx->rot[0] = turn_angle(ctx, -1); */
+    /* ctx->rot[1] = turn_angle(ctx, 2); */
+    /* ctx->rot[2] = turn_angle(ctx, -3); */
+    /* ctx->rot[3] = turn_angle(ctx, 4); */
+
+    /* n=7 experiment */
+    /* ctx->gen_len = 4; */
+
+    /* ctx->rot[0] = turn_angle(ctx, 2); */
+    /* ctx->rot[1] = turn_angle(ctx, 2); */
+    /* ctx->rot[2] = turn_angle(ctx, 3); */
+    /* ctx->rot[3] = turn_angle(ctx, 3); */
+
 
 
     test_xy_point(ctx);
