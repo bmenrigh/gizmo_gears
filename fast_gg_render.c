@@ -21,8 +21,8 @@
 #define MAX_GEN_LEN  8
 
 
-#define FPREC_128 0
-/*#define FPREC_64 0*/
+/*#define FPREC_128 0*/
+#define FPREC_64 0
 
 #ifdef FPREC_128
 
@@ -578,9 +578,18 @@ double point_order(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx
     uint32_t count = 0;
     int32_t count_a = 0;
     int32_t count_b = 0;
+    int stuck = 0;
     do {
 
         if (step == 0) {
+
+            /* Do stuck checking */
+            if (stuck == 1) {
+                fprintf(stderr, "point (%.15f, %.15f) stuck at count %d\n", (double)__real__ op, (double)__imag__ op, count);
+
+                return NAN;
+            }
+            stuck = 1;
 
             /* Only track before a is done */
             x = -1;
@@ -613,6 +622,9 @@ double point_order(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx
 
         /* Try to do turn */
         if (point_in_n(ctx, p, step) == 1) {
+            count++;
+            stuck = 0;
+
             p = turn_n(ctx, p, step);
 
             if ((step & 1) == 0) {
@@ -625,11 +637,7 @@ double point_order(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx
         /*step ^= 1;*/ /* toggle between a and b */
         step = (step + 1) % ctx->gen_len;
 
-        count++;
-
-
-
-        if (count % 10000000 == 0) {
+        if ((count > 0) && (count % 50000000 == 0)) {
             fprintf(stderr, "Done %d turns\n", count);
         }
 
@@ -864,10 +872,14 @@ void * image_sample_thread(void *targ) {
     /*     xy_sample(ctx, 2395, 1673, 1000, 1000, vctx); */
     /* } */
 
-    fprintf(stderr, "== SAMPLING BORDER PIXELS ==\n");
+    if (tctx->tnum == 0) {
+        fprintf(stderr, "== SAMPLING BORDER PIXELS ==\n");
+    }
     for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
 
-        fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);
+        if (tctx->tnum == 0) {
+            fprintf(stderr, "BORDER: working on row %d of %d\n", y, ctx->img_h);
+        }
 
         for (int x = 0; x < ctx->img_w; x++) {
 
@@ -877,28 +889,38 @@ void * image_sample_thread(void *targ) {
         }
     }
 
-    fprintf(stderr, "== SAMPLING DISC PIXELS ==\n");
+    if (tctx->tnum == 0) {
+        fprintf(stderr, "== SAMPLING DISC PIXELS ==\n");
+    }
     for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
 
-        fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);
+        if (tctx->tnum == 0) {
+            fprintf(stderr, "DISC: working on row %d of %d\n", y, ctx->img_h);
+        }
 
         for (int x = 0; x < ctx->img_w; x++) {
             xy_sample(ctx, x, y, 32, 4, vctx);
         }
     }
 
-    fprintf(stderr, "== OVER SAMPLING LOW-ORDER PIXELS ==\n");
-    vctx->limit = 100000;
-    for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
-        fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);
+    /* if (tctx->tnum == 0) { */
+    /*     fprintf(stderr, "== OVER SAMPLING LOW-ORDER PIXELS ==\n"); */
+    /* } */
+    /* vctx->limit = 100000; */
+    /* for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) { */
+    /*     if (tctx->tnum == 0) { */
+    /*         fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h); */
+    /*     } */
 
-        for (int x = 0; x < ctx->img_w; x++) {
+    /*     for (int x = 0; x < ctx->img_w; x++) { */
 
-            xy_sample(ctx, x, y, 128, 1, vctx);
-        }
+    /*         xy_sample(ctx, x, y, 128, 1, vctx); */
+    /*     } */
+    /* } */
+
+    if (tctx->tnum == 0) {
+        fprintf(stderr, "== OVER SAMPLING SOBEL EDGE PIXELS ==\n");
     }
-
-    fprintf(stderr, "== OVER SAMPLING SOBEL EDGE PIXELS ==\n");
     double max_order = (double)ctx->n;
     double min_order = 1.0;
 
@@ -961,7 +983,9 @@ void * image_sample_thread(void *targ) {
      */
     for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
 
-        fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h);
+        if (tctx->tnum == 0) {
+            fprintf(stderr, "SOBEL: working on row %d of %d\n", y, ctx->img_h);
+        }
 
         for (int x = 0; x < ctx->img_w; x++) {
 
@@ -1211,7 +1235,7 @@ int main (void) {
     /* ctx->ymax = 1.0 * ctx->r; */
 
     /* Render wedge only */
-    double goalh = 2048;
+    double goalh = 8192;
     double wedge_height = sqrt((double)ctx->r_sq - 1.0);
     double wedge_width = (double)ctx->r - 1.0;
     ctx->img_h = (int)floor(goalh);
@@ -1295,6 +1319,8 @@ int main (void) {
     for (int i = 0; i < NUM_THREADS; i++) {
         pthread_join(tctxs[i].tid, NULL);
     }
+
+    fprintf(stderr, "Highest order seen: %lu\n", ctx->highest_order);
 
     ctx_to_png(ctx, "/tmp/test.png");
 
