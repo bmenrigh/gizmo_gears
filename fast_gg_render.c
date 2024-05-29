@@ -1,3 +1,6 @@
+
+#define  _GNU_SOURCE /* gets us M_PIl */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -5,6 +8,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <math.h>
+#include <float.h>
 #include <quadmath.h>
 #include <complex.h>
 #include <assert.h>
@@ -21,10 +25,9 @@
 #define MAX_GEN_LEN  8
 
 
-/*#define FPREC_128 0*/
-#define FPREC_64 0
+#define FPREC 80
 
-#ifdef FPREC_128
+#if FPREC == 128
 
 #define COMPLEX_T __complex128
 #define FLOAT_T __float128
@@ -35,11 +38,22 @@
 #define FCOS_F(x) (cosq(x))
 #define PI_L      M_PIq
 #define EPSILON_L FLOAT_L(1e-16)
+#define MANTDIG_L FLT128_MANT_DIG
 
-#endif
+#elif FPREC == 80
 
+#define COMPLEX_T _Complex long double
+#define FLOAT_T long double
+#define FLOAT_L(N) (N##L)
+#define FABS_F(x) (fabsl(x))
+#define CABS_F(x) (cabsl(x))
+#define FSIN_F(x) (sinl(x))
+#define FCOS_F(x) (cosl(x))
+#define PI_L      M_PIl
+#define EPSILON_L FLOAT_L(1e-10)
+#define MANTDIG_L LDBL_MANT_DIG
 
-#ifdef FPREC_64
+#elif FPREC == 64
 
 #define COMPLEX_T complex
 #define FLOAT_T double
@@ -50,6 +64,11 @@
 #define FCOS_F(x) (cos(x))
 #define PI_L      M_PI
 #define EPSILON_L FLOAT_L(1e-10)
+#define MANTDIG_L DBL_MANT_DIG
+
+# else
+
+#error "FPREC must defined and set to one of {128,80,64}"
 
 #endif
 
@@ -1184,6 +1203,8 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
 
 
 int main (void) {
+
+    fprintf(stderr, "Float precision set to %d, sizeof(FLOAT_T) is %lu, mantissa digits is %d\n", FPREC, sizeof(FLOAT_T), MANTDIG_L);
 
     struct render_ctx *ctx = calloc(1, sizeof(struct render_ctx));
 
