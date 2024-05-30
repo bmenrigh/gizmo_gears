@@ -25,6 +25,12 @@
 #define MAX_GEN_LEN  8
 
 
+/* #define naming conventions:
+ * _T -> type
+ * _F -> function
+ * _L -> literal
+ */
+
 #define FPREC 80
 
 #if FPREC == 128
