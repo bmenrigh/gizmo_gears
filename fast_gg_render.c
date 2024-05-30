@@ -18,7 +18,7 @@
 #include <png.h>
 
 
-#define ORD_LIMIT    (1000 * 1000 * 1000)
+#define ORD_LIMIT    (100 * 1000 * 1000)
 #define NUM_THREADS  12
 #define LOG_SCALE    0x1000000
 #define GROW_VISITED 1024
@@ -31,7 +31,7 @@
  * _L -> literal
  */
 
-#define FPREC 80
+#define FPREC 64
 
 #if FPREC == 128
 
@@ -510,9 +510,14 @@ double log_order_to_val(double log_order, double min_order, double max_order) {
     double log_min_order = log(min_order);
     double log_max_order = log(max_order);
 
-    double offset = 2.0; /* TODO: revisit this hack */
+    double offset = 1.0; /* required so log(x < 1) doesn't turn negative */
 
-    return ((log_order - log_min_order) + offset) / ((log_max_order - log_min_order) + offset);
+    double v = ((log_order - log_min_order) + offset) / ((log_max_order - log_min_order) + offset);
+
+    /* This stretches out the color space where more colors are allocated
+     * to higher orders. An exponent of 1 is no stretch. 2.0 is a minor stretch.
+     */
+    return 1.0 - pow((1.0 - v), 2.0);
 }
 
 
@@ -706,15 +711,18 @@ double point_order(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx
     } while ((count < vctx->limit) && ((step != 0) || (count < ctx->n) || (point_equal_epsilon(ctx, op, p) != 1)));
 
     uint64_t order_sum = count_a + count_b;
-    uint64_t max_order = __atomic_load_n(&(ctx->highest_order), __ATOMIC_RELAXED);
 
-    if (order_sum > max_order) {
+    if (count < vctx->limit) {
+        uint64_t max_order = __atomic_load_n(&(ctx->highest_order), __ATOMIC_RELAXED);
 
-        fprintf(stderr, "New max order of %lu found for point (%.15f, %.15f)\n", order_sum, (double)__real__ op, (double)__imag__ op);
+        if (order_sum > max_order) {
+
+            fprintf(stderr, "New max order of %lu found for point (%.15f, %.15f)\n", order_sum, (double)__real__ op, (double)__imag__ op);
+        }
+
+        /* Now write new order back into highest_seen atomically */
+        while ((order_sum > max_order) && (__atomic_compare_exchange_n(&(ctx->highest_order), &max_order, order_sum, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED) == true));
     }
-
-    /* Now write new order back into highest_seen atomically */
-    while ((order_sum > max_order) && (__atomic_compare_exchange_n(&(ctx->highest_order), &max_order, order_sum, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED) == true));
 
 
     /* Figure out how to calculate order based on absolute or delta measure */
@@ -826,7 +834,12 @@ void point_sample(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx)
                 int o_m = xy_to_offset(ctx, vctx->vx_m[i], vctx->vy_m[i]);
 
                 __sync_add_and_fetch(&(ctx->grid[o_m].count), vctx->visited_m[o_m]);
-                __sync_sub_and_fetch(&(ctx->grid[o_m].scaled_log_order), scaled_ord * vctx->visited_m[o_m]);
+
+                if (ctx->order_delta == 0) {
+                    __sync_add_and_fetch(&(ctx->grid[o_m].scaled_log_order), scaled_ord * vctx->visited_m[o_m]);
+                } else {
+                    __sync_sub_and_fetch(&(ctx->grid[o_m].scaled_log_order), scaled_ord * vctx->visited_m[o_m]);
+                }
 
                 vctx->visited_m[o_m] = 0; /* clear this visit */
             }
@@ -946,8 +959,18 @@ void * image_sample_thread(void *targ) {
     if (tctx->tnum == 0) {
         fprintf(stderr, "== OVER SAMPLING SOBEL EDGE PIXELS ==\n");
     }
-    double max_order = (double)ctx->n;
-    double min_order = 1.0;
+
+
+    double max_order;
+    double min_order;
+
+    if (ctx->order_delta == 0) {
+        max_order = vctx->limit;
+        min_order = (double)ctx->n;
+    } else {
+        max_order = (double)ctx->n;
+        min_order = 1.0;
+    }
 
     double *vgrid = calloc(ctx->img_h * ctx->img_w, sizeof(double));
     double *vsobel_mag = calloc(ctx->img_h * ctx->img_w, sizeof(double));
@@ -1220,19 +1243,19 @@ int main (void) {
     pthread_mutex_t grid_mutex = PTHREAD_MUTEX_INITIALIZER;
     ctx->grid_mutex = &(grid_mutex);
 
-    ctx->wedge_only = 0;
-    ctx->box_only = 1;
+    ctx->wedge_only = 1;
+    ctx->box_only = 0;
     ctx->order_delta = 0;
 
-    ctx->n = 7;
-    ctx->r = FLOAT_L(1.62357492692335958);
-    ctx->r_sq = ctx->r * ctx->r;
-    ctx->sym180 = 0;
+    /* ctx->n = 7; */
+    /* ctx->r = FLOAT_L(1.62357492692335958); */
+    /* ctx->r_sq = ctx->r * ctx->r; */
+    /* ctx->sym180 = 0; */
 
-    /* ctx->n = 12; */
-    /* ctx->r = sqrtq(FLOAT_L(2.0)); */
-    /* ctx->r_sq = FLOAT_L(2.0); */
-    /* ctx->sym180 = 1; */
+    ctx->n = 12;
+    ctx->r = sqrtq(FLOAT_L(2.0));
+    ctx->r_sq = FLOAT_L(2.0);
+    ctx->sym180 = 1;
 
     /* n=12 critical radius */
     /* https://twistypuzzles.com/forum/viewtopic.php?t=25752&hilit=gizmo+gears+critical+radius&start=600 */
@@ -1262,7 +1285,7 @@ int main (void) {
     /* ctx->ymax = 1.0 * ctx->r; */
 
     /* Render wedge only */
-    double goalh = 8192;
+    double goalh = 4096;
     double wedge_height = sqrt((double)ctx->r_sq - 1.0);
     double wedge_width = (double)ctx->r - 1.0;
     ctx->img_h = (int)floor(goalh);
@@ -1290,9 +1313,10 @@ int main (void) {
 
 
     /* A' B generator */
-    /* __real__ ctx->rot_a = FCOS_F(PI_L * (FLOAT_L(2.0) / (FLOAT_T)ctx->n)); */
-    /* __imag__ ctx->rot_a = FSIN_F(PI_L * (FLOAT_L(2.0) / (FLOAT_T)ctx->n)); */
-    /* ctx->rot_b = conjq(ctx->rot_a); */
+    ctx->gen_len = 2;
+    ctx->rot[0] = turn_angle(ctx, -1);
+    ctx->rot[1] = turn_angle(ctx, 1);
+
 
     /* A^-4 B generator */
     /* ctx->gen_len = 2; */
@@ -1309,12 +1333,12 @@ int main (void) {
     /* ctx->rot[3] = turn_angle(ctx, 4); */
 
     /* n=7 experiment */
-    ctx->gen_len = 4;
+    /* ctx->gen_len = 4; */
 
-    ctx->rot[0] = turn_angle(ctx, 2);
-    ctx->rot[1] = turn_angle(ctx, 2);
-    ctx->rot[2] = turn_angle(ctx, 3);
-    ctx->rot[3] = turn_angle(ctx, 3);
+    /* ctx->rot[0] = turn_angle(ctx, 2); */
+    /* ctx->rot[1] = turn_angle(ctx, 2); */
+    /* ctx->rot[2] = turn_angle(ctx, 3); */
+    /* ctx->rot[3] = turn_angle(ctx, 3); */
 
 
 
