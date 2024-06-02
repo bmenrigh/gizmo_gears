@@ -40,6 +40,7 @@
 #define FLOAT_L(N) (N##Q)
 #define FABS_F(x) (fabsq(x))
 #define CABS_F(x) (cabsq(x))
+#define SQRT_F(x) (sqrtq(x))
 #define FSIN_F(x) (sinq(x))
 #define FCOS_F(x) (cosq(x))
 #define PI_L      M_PIq
@@ -53,6 +54,7 @@
 #define FLOAT_L(N) (N##L)
 #define FABS_F(x) (fabsl(x))
 #define CABS_F(x) (cabsl(x))
+#define SQRT_F(x) (sqrtl(x))
 #define FSIN_F(x) (sinl(x))
 #define FCOS_F(x) (cosl(x))
 #define PI_L      M_PIl
@@ -66,6 +68,7 @@
 #define FLOAT_L(N) (N)
 #define FABS_F(x) (fabs(x))
 #define CABS_F(x) (cabs(x))
+#define SQRT_F(x) (sqrt(x))
 #define FSIN_F(x) (sin(x))
 #define FCOS_F(x) (cos(x))
 #define PI_L      M_PI
@@ -875,10 +878,7 @@ void xy_sample(struct render_ctx *ctx, int x, int y, uint32_t n, uint32_t m, str
 }
 
 
-void * image_sample_thread(void *targ) {
-
-    struct thread_ctx *tctx = (struct thread_ctx *)targ;
-    struct render_ctx *ctx = tctx->ctx;
+void image_aa_sobel(struct render_ctx *ctx) {
 
     struct visited_ctx svctx;
     struct visited_ctx *vctx = &svctx;
@@ -906,60 +906,8 @@ void * image_sample_thread(void *targ) {
     vctx->vused_m = 0;
     vctx->vsize_m = GROW_VISITED;
 
-    /* for (int i = 0; i < 1000; i++) { */
-    /*     xy_sample(ctx, 2395, 1673, 1000, 1000, vctx); */
-    /* } */
 
-    if (tctx->tnum == 0) {
-        fprintf(stderr, "== SAMPLING BORDER PIXELS ==\n");
-    }
-    for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
-
-        if (tctx->tnum == 0) {
-            fprintf(stderr, "BORDER: working on row %d of %d\n", y, ctx->img_h);
-        }
-
-        for (int x = 0; x < ctx->img_w; x++) {
-
-            if (xy_on_border(ctx, x, y) == 1) {
-                xy_sample(ctx, x, y, 256, 256, vctx);
-            }
-        }
-    }
-
-    if (tctx->tnum == 0) {
-        fprintf(stderr, "== SAMPLING DISC PIXELS ==\n");
-    }
-    for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
-
-        if (tctx->tnum == 0) {
-            fprintf(stderr, "DISC: working on row %d of %d\n", y, ctx->img_h);
-        }
-
-        for (int x = 0; x < ctx->img_w; x++) {
-            xy_sample(ctx, x, y, 32, 4, vctx);
-        }
-    }
-
-    /* if (tctx->tnum == 0) { */
-    /*     fprintf(stderr, "== OVER SAMPLING LOW-ORDER PIXELS ==\n"); */
-    /* } */
-    /* vctx->limit = 100000; */
-    /* for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) { */
-    /*     if (tctx->tnum == 0) { */
-    /*         fprintf(stderr, "Working on row %d of %d\n", y, ctx->img_h); */
-    /*     } */
-
-    /*     for (int x = 0; x < ctx->img_w; x++) { */
-
-    /*         xy_sample(ctx, x, y, 128, 1, vctx); */
-    /*     } */
-    /* } */
-
-    if (tctx->tnum == 0) {
-        fprintf(stderr, "== OVER SAMPLING SOBEL EDGE PIXELS ==\n");
-    }
-
+    fprintf(stderr, "== OVER SAMPLING SOBEL EDGE PIXELS ==\n");
 
     double max_order;
     double min_order;
@@ -1029,9 +977,9 @@ void * image_sample_thread(void *targ) {
     /* Use the sobel filter magnitude to select pixels for
      * sampling to make sure edges have enough samples
      */
-    for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
+    for (int y = 0; y < ctx->img_h; y++) {
 
-        if (tctx->tnum == 0) {
+        if (y % 25 == 0) {
             fprintf(stderr, "SOBEL: working on row %d of %d\n", y, ctx->img_h);
         }
 
@@ -1048,6 +996,84 @@ void * image_sample_thread(void *targ) {
     free(vgrid);
     free(vsobel_mag);
     free(vsobel_ang);
+
+    free(vctx->visited);
+    free(vctx->visited_m);
+    free(vctx->vx);
+    free(vctx->vy);
+    free(vctx->vx_m);
+    free(vctx->vy_m);
+
+    return;
+}
+
+
+void * image_sample_thread(void *targ) {
+
+    struct thread_ctx *tctx = (struct thread_ctx *)targ;
+    struct render_ctx *ctx = tctx->ctx;
+
+    struct visited_ctx svctx;
+    struct visited_ctx *vctx = &svctx;
+
+    vctx->limit = ORD_LIMIT;
+
+    vctx->visited = calloc(ctx->img_w * ctx->img_h, sizeof(uint8_t));
+    assert(vctx->visited != NULL);
+    vctx->visited_m = calloc(ctx->img_w * ctx->img_h, sizeof(uint8_t));
+    assert(vctx->visited_m != NULL);
+
+    vctx->vx = malloc(GROW_VISITED * sizeof(uint32_t));
+    assert(vctx->vx != NULL);
+    vctx->vy = malloc(GROW_VISITED * sizeof(uint32_t));
+    assert(vctx->vy != NULL);
+
+    vctx->vx_m = malloc(GROW_VISITED * sizeof(uint32_t));
+    assert(vctx->vx_m != NULL);
+    vctx->vy_m = malloc(GROW_VISITED * sizeof(uint32_t));
+    assert(vctx->vy_m != NULL);
+
+    vctx->vused = 0;
+    vctx->vsize = GROW_VISITED;
+
+    vctx->vused_m = 0;
+    vctx->vsize_m = GROW_VISITED;
+
+    /* for (int i = 0; i < 1000; i++) { */
+    /*     xy_sample(ctx, 2395, 1673, 1000, 1000, vctx); */
+    /* } */
+
+    if (tctx->tnum == 0) {
+        fprintf(stderr, "== SAMPLING BORDER PIXELS ==\n");
+    }
+    for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
+
+        if (tctx->tnum == 0) {
+            fprintf(stderr, "BORDER: working on row %d of %d\n", y, ctx->img_h);
+        }
+
+        for (int x = 0; x < ctx->img_w; x++) {
+
+            if (xy_on_border(ctx, x, y) == 1) {
+                xy_sample(ctx, x, y, 256, 256, vctx);
+            }
+        }
+    }
+
+    if (tctx->tnum == 0) {
+        fprintf(stderr, "== SAMPLING DISC PIXELS ==\n");
+    }
+    for (int y = tctx->tnum; y < ctx->img_h; y += tctx->num_threads) {
+
+        if (tctx->tnum == 0) {
+            fprintf(stderr, "DISC: working on row %d of %d\n", y, ctx->img_h);
+        }
+
+        for (int x = 0; x < ctx->img_w; x++) {
+            xy_sample(ctx, x, y, 32, 4, vctx);
+        }
+    }
+
 
     free(vctx->visited);
     free(vctx->visited_m);
@@ -1247,15 +1273,21 @@ int main (void) {
     ctx->box_only = 0;
     ctx->order_delta = 0;
 
+    /* ctx->n = 10; */
+    /* ctx->r = SQRT_F((FLOAT_L(1.0) / FLOAT_L(2.0)) * (FLOAT_L(7.0) - SQRT_F(5.0))); */
+    /* ctx->r_sq = (FLOAT_L(1.0) / FLOAT_L(2.0)) * (FLOAT_L(7.0) - SQRT_F(5.0)); */
+    /* ctx->sym180 = 1; */
+
     /* ctx->n = 7; */
-    /* ctx->r = FLOAT_L(1.62357492692335958); */
+    /* /\*ctx->r = FLOAT_L(1.62357492692335958);*\/ /\* tom rokicki approx *\/ */
+    /* ctx->r = FLOAT_L(1.62318927293966937); /\* Eric's construction *\/ */
     /* ctx->r_sq = ctx->r * ctx->r; */
     /* ctx->sym180 = 0; */
 
-    ctx->n = 12;
-    ctx->r = sqrtq(FLOAT_L(2.0));
-    ctx->r_sq = FLOAT_L(2.0);
-    ctx->sym180 = 1;
+    /* ctx->n = 12; */
+    /* ctx->r = sqrtq(FLOAT_L(2.0)); */
+    /* ctx->r_sq = FLOAT_L(2.0); */
+    /* ctx->sym180 = 1; */
 
     /* n=12 critical radius */
     /* https://twistypuzzles.com/forum/viewtopic.php?t=25752&hilit=gizmo+gears+critical+radius&start=600 */
@@ -1265,9 +1297,9 @@ int main (void) {
     /* ctx->r_sq = 40.0Q - 22.0Q * sqrtq(3.0Q); */
 
     /* N=5 critical radius */
-    /* ctx->n = 5; */
-    /* ctx->r = sqrtq((7.0Q + sqrtq(5.0Q)) / 2.0Q); */
-    /* ctx->r_sq = (7.0Q + sqrtq(5.0Q)) / 2.0Q; */
+    ctx->n = 5;
+    ctx->r = sqrtq((7.0Q + sqrtq(5.0Q)) / 2.0Q);
+    ctx->r_sq = (7.0Q + sqrtq(5.0Q)) / 2.0Q;
 
     /* ctx->n = 14; */
     /* ctx->r_sq = 1.6180339887Q; */
@@ -1275,7 +1307,7 @@ int main (void) {
 
 
     /* Render full puzzle */
-    /* double goalw = 1024; */
+    /* double goalw = 16384; */
     /* double scalef = goalw / ((2.0 * ctx->r) + 2.0); */
     /* ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef); */
     /* ctx->img_h = (int)floor(2.0 * ctx->r * scalef); */
@@ -1327,9 +1359,9 @@ int main (void) {
     /* n=7 generator that seems to jumble */
     /* ctx->gen_len = 4; */
 
-    /* ctx->rot[0] = turn_angle(ctx, -1); */
+    /* ctx->rot[0] = turn_angle(ctx, 1); */
     /* ctx->rot[1] = turn_angle(ctx, 2); */
-    /* ctx->rot[2] = turn_angle(ctx, -3); */
+    /* ctx->rot[2] = turn_angle(ctx, 3); */
     /* ctx->rot[3] = turn_angle(ctx, 4); */
 
     /* n=7 experiment */
@@ -1370,6 +1402,9 @@ int main (void) {
     for (int i = 0; i < NUM_THREADS; i++) {
         pthread_join(tctxs[i].tid, NULL);
     }
+
+    /* aa image */
+    image_aa_sobel(ctx);
 
     fprintf(stderr, "Highest order seen: %lu\n", ctx->highest_order);
 
