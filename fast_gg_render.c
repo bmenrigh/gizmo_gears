@@ -15,6 +15,8 @@
 #include <setjmp.h>
 #include <pthread.h>
 
+#include <getopt.h>
+
 #include <png.h>
 
 
@@ -43,6 +45,7 @@
 #define SQRT_F(x) (sqrtq(x))
 #define FSIN_F(x) (sinq(x))
 #define FCOS_F(x) (cosq(x))
+#define STRTO_F(x) (strtoflt128(x, NULL))
 #define PI_L      M_PIq
 #define EPSILON_L FLOAT_L(1e-16)
 #define MANTDIG_L FLT128_MANT_DIG
@@ -57,6 +60,7 @@
 #define SQRT_F(x) (sqrtl(x))
 #define FSIN_F(x) (sinl(x))
 #define FCOS_F(x) (cosl(x))
+#define STRTO_F(x) (strtold(x, NULL))
 #define PI_L      M_PIl
 #define EPSILON_L FLOAT_L(1e-10)
 #define MANTDIG_L LDBL_MANT_DIG
@@ -71,6 +75,7 @@
 #define SQRT_F(x) (sqrt(x))
 #define FSIN_F(x) (sin(x))
 #define FCOS_F(x) (cos(x))
+#define STRTO_F(x) (strtod(x, NULL))
 #define PI_L      M_PI
 #define EPSILON_L FLOAT_L(1e-10)
 #define MANTDIG_L DBL_MANT_DIG
@@ -102,6 +107,8 @@ struct visited_ctx {
 };
 
 struct render_ctx {
+    char out[1024];
+    int verbose;
     uint32_t n;
     FLOAT_T r;
     FLOAT_T r_sq;
@@ -736,7 +743,7 @@ double point_order(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx
 
             fprintf(stderr, "point (%.15f, %.15f) hit limit with order %lu\n", (double)__real__ op, (double)__imag__ op, order_sum);
 
-            return NAN;
+            /*return NAN;*/
         }
         if (order_sum == 0) {
             return NAN;
@@ -986,9 +993,9 @@ void image_aa_sobel(struct render_ctx *ctx) {
         for (int x = 0; x < ctx->img_w; x++) {
 
             int o = xy_to_offset(ctx, x, y);
-            int amt = (int)(128.0 * fabs(vsobel_mag[o]));
+            int amt = (int)(1024.0 * fabs(vsobel_mag[o]));
 
-            xy_sample(ctx, x, y, 128, amt, vctx);
+            xy_sample(ctx, x, y, 1024, amt, vctx);
         }
     }
 
@@ -1039,8 +1046,14 @@ void * image_sample_thread(void *targ) {
     vctx->vused_m = 0;
     vctx->vsize_m = GROW_VISITED;
 
-    /* for (int i = 0; i < 1000; i++) { */
-    /*     xy_sample(ctx, 2395, 1673, 1000, 1000, vctx); */
+    /* COMPLEX_T p; */
+    /* __real__ p = 0; */
+    /* __imag__ p = 0; */
+
+    /* point_sample(ctx, p, vctx); */
+
+    /* for (int i = 0; i < 100; i++) { */
+    /*     xy_sample(ctx, (int)(ctx->img_w / 2), (int)(ctx->img_h / 2), 100, 100, vctx); */
     /* } */
 
     if (tctx->tnum == 0) {
@@ -1105,7 +1118,7 @@ void test_xy_point(struct render_ctx *ctx) {
 }
 
 
-void ctx_to_png(struct render_ctx *ctx, char *name) {
+void ctx_to_png(struct render_ctx *ctx) {
 
     png_bytep image_data = calloc(ctx->img_h * ctx->img_w * 3, sizeof(png_byte));
 
@@ -1247,7 +1260,7 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
         }
     }
 
-    write_png_file(name, ctx->img_w, ctx->img_h, image_data);
+    write_png_file(ctx->out, ctx->img_w, ctx->img_h, image_data);
 
     free(vgrid);
     free(vsobel_mag);
@@ -1257,11 +1270,11 @@ void ctx_to_png(struct render_ctx *ctx, char *name) {
 }
 
 
-int main (void) {
-
-    fprintf(stderr, "Float precision set to %d, sizeof(FLOAT_T) is %lu, mantissa digits is %d\n", FPREC, sizeof(FLOAT_T), MANTDIG_L);
+int main (int argc, char **argv) {
 
     struct render_ctx *ctx = calloc(1, sizeof(struct render_ctx));
+
+    strncpy(ctx->out, "/tmp/test.png", 1023);
 
     ctx->highest_order = 0;
     ctx->epsilon = EPSILON_L;
@@ -1272,6 +1285,101 @@ int main (void) {
     ctx->wedge_only = 1;
     ctx->box_only = 0;
     ctx->order_delta = 0;
+
+    ctx->n = 15;
+    ctx->r = 1.20;
+    ctx->r_sq = ctx->r * ctx->r;
+
+
+    static struct option long_options[] =
+        {
+            {"output",     required_argument, 0, 'o'},
+
+            {"radius",     required_argument, 0, 'r'},
+            {"n",          required_argument, 0, 'n'},
+            {"radius-sq",  required_argument, 0,   0},
+
+            {"color-delta", no_argument,      0,   0},
+            {"wedge-only",  no_argument,      0,   0},
+
+            {"verbose",     no_argument,      0, 'v'},
+
+            /* Terminate list */
+            {0, 0, 0, 0}
+        };
+
+    while (1) {
+
+        /* getopt_long stores the option index here. */
+        int option_index = 0;
+
+        int c = getopt_long (argc, argv, "o:r:n:v:",
+                             long_options, &option_index);
+
+        /* Detect the end of the options. */
+        if (c == -1) {
+            break;
+        }
+
+        int ret;
+
+        switch (c) {
+        case 0:
+            /* If this option set a flag, do nothing else now. */
+            if (long_options[option_index].flag != 0) {
+                break;
+            }
+
+            if (strcmp("radius-sq", long_options[option_index].name) == 0) {
+                ctx->r_sq = STRTO_F(optarg);
+                ctx->r= SQRT_F(ctx->r_sq);
+
+                break;
+            }
+
+            if (strcmp("color-delta", long_options[option_index].name) == 0) {
+                ctx->order_delta = 1;
+
+                break;
+            }
+
+            if (strcmp("wedge-only", long_options[option_index].name) == 0) {
+                ctx->wedge_only = 1;
+
+                break;
+            }
+
+            if (strcmp("verbose", long_options[option_index].name) == 0) {
+                ctx->verbose = 1;
+
+                break;
+            }
+
+            abort();
+
+        case 'o':
+            strncpy(ctx->out, optarg, 1023);
+            break;
+
+        case 'r':
+            ctx->r = STRTO_F(optarg);
+            ctx->r_sq = ctx->r * ctx->r;
+            break;
+
+        case 'n':
+            ret = sscanf(optarg, "%u", &(ctx->n));
+            assert(ret == 1);
+            break;
+
+        case 'v':
+            ctx->verbose = 1;
+            break;
+
+        default:
+            abort();
+        }
+    }
+
 
     /* ctx->n = 10; */
     /* ctx->r = SQRT_F((FLOAT_L(1.0) / FLOAT_L(2.0)) * (FLOAT_L(7.0) - SQRT_F(5.0))); */
@@ -1297,9 +1405,11 @@ int main (void) {
     /* ctx->r_sq = 40.0Q - 22.0Q * sqrtq(3.0Q); */
 
     /* N=5 critical radius */
-    ctx->n = 5;
-    ctx->r = sqrtq((7.0Q + sqrtq(5.0Q)) / 2.0Q);
-    ctx->r_sq = (7.0Q + sqrtq(5.0Q)) / 2.0Q;
+    /* ctx->n = 5; */
+    /* ctx->r = sqrtq((7.0Q + sqrtq(5.0Q)) / 2.0Q); */
+    /* ctx->r_sq = (7.0Q + sqrtq(5.0Q)) / 2.0Q; */
+
+
 
     /* ctx->n = 14; */
     /* ctx->r_sq = 1.6180339887Q; */
@@ -1317,7 +1427,7 @@ int main (void) {
     /* ctx->ymax = 1.0 * ctx->r; */
 
     /* Render wedge only */
-    double goalh = 4096;
+    double goalh = 1024;
     double wedge_height = sqrt((double)ctx->r_sq - 1.0);
     double wedge_width = (double)ctx->r - 1.0;
     ctx->img_h = (int)floor(goalh);
@@ -1372,15 +1482,19 @@ int main (void) {
     /* ctx->rot[2] = turn_angle(ctx, 3); */
     /* ctx->rot[3] = turn_angle(ctx, 3); */
 
-
-
-    test_xy_point(ctx);
-
-    fprintf(stderr, "Image size %dx%d\n", ctx->img_w, ctx->img_h);
-
-    fprintf(stderr, "Image box (%.5f, %.5f) to (%.5f, %.5f)\n",
+    fprintf(stderr, "== RENDER SETTINGS ==\n");
+    fprintf(stderr, "N: %d\n", ctx->n);
+    fprintf(stderr, "R: %.15f\n", (double)ctx->r);
+    fprintf(stderr, "Wedge-Only: %d\n", ctx->wedge_only);
+    fprintf(stderr, "Box (%.5f, %.5f) to (%.5f, %.5f)\n",
             ctx->xmin, ctx->ymin,
             ctx->xmax, ctx->ymax);
+    fprintf(stderr, "Image size %dx%d\n", ctx->img_w, ctx->img_h);
+    fprintf(stderr, "Float precision set to %d, sizeof(FLOAT_T) is %lu, mantissa digits is %d\n", FPREC, sizeof(FLOAT_T), MANTDIG_L);
+
+
+
+    /*test_xy_point(ctx);*/
 
     struct thread_ctx *tctxs = (struct thread_ctx *)calloc(NUM_THREADS, sizeof(struct thread_ctx));
     for (int i = 0; i < NUM_THREADS; i++) {
@@ -1404,11 +1518,11 @@ int main (void) {
     }
 
     /* aa image */
-    image_aa_sobel(ctx);
+    /*image_aa_sobel(ctx);*/
 
     fprintf(stderr, "Highest order seen: %lu\n", ctx->highest_order);
 
-    ctx_to_png(ctx, "/tmp/test.png");
+    ctx_to_png(ctx);
 
 
     free(ctx->grid);
