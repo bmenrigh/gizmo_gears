@@ -21,8 +21,8 @@
 
 
 #define ORD_LIMIT    (100 * 1000 * 1000)
-#define NUM_THREADS  12
-#define LOG_SCALE    0x1000000
+#define NUM_THREADS  24
+#define LOG_SCALE    0x100000000
 #define GROW_VISITED 1024
 #define MAX_GEN_LEN  8
 
@@ -531,6 +531,20 @@ double log_order_to_val(double log_order, double min_order, double max_order) {
 }
 
 
+double log_order_scale_cycle_to_val(double log_order) {
+
+    double neg = 1;
+    if (log_order < 0) {
+        neg = -1;
+        log_order = fabs(log_order);
+    }
+
+    double v = fmod(log_order, log(10.0)); /* fractional part of log base 10 */
+
+    return v * neg;
+}
+
+
 void val_to_rgb(double val, uint8_t *R, uint8_t *G, uint8_t *B, double brightness) {
 
     assert((brightness >= 0.0) && (brightness <= 1.0));
@@ -549,6 +563,51 @@ void val_to_rgb(double val, uint8_t *R, uint8_t *G, uint8_t *B, double brightnes
         *G = (int)round(sin(vp2 * 2.0) * 255.0 * brightness);
         *B = (int)round((1.0 - cos(vp2)) * 255.0 * brightness);
     }
+}
+
+
+double hsv_to_rgb_f(int n, double h, double s, double v) {
+    /* https://en.wikipedia.org/wiki/HSL_and_HSV */
+
+    double k = fmod((double)n + h * 6.0, 6.0);
+
+    double k_adj = fmax(0.0, fmin(fmin(k, 4 - k), 1.0));
+
+    return v - (v * s * k_adj);
+}
+
+
+void hsv_to_rgb(double h, double s, double v, uint8_t *R, uint8_t *G, uint8_t *B) {
+
+    *R = (uint8_t)round(hsv_to_rgb_f(5.0, h, s, v) * 255.0);
+    *G = (uint8_t)round(hsv_to_rgb_f(3.0, h, s, v) * 255.0);
+    *B = (uint8_t)round(hsv_to_rgb_f(1.0, h, s, v) * 255.0);
+}
+
+
+void val_to_rgb2(double val, uint8_t *R, uint8_t *G, uint8_t *B, double brightness) {
+
+    assert((brightness >= 0.0) && (brightness <= 1.0));
+
+    /* delta colors */
+    double vp2 = val * M_PI_2;
+
+    double h, s, v;
+
+    if (vp2 >= 0) {
+        h = 0;
+    } else {
+        vp2 = 0.0 - vp2; /* flip to positive */
+
+        h = 0.5;
+    }
+
+    s = 0.25 + 0.5 * sin(2.0 * vp2);
+
+    v = 0.75 + 0.25 * sin(vp2);
+    v *= brightness;
+
+    hsv_to_rgb(h, s, v, R, G, B);
 }
 
 
@@ -782,6 +841,10 @@ double point_order(struct render_ctx *ctx, COMPLEX_T p, struct visited_ctx *vctx
             return (log((double)count_a) - log((double)count_b)); /* log(a/b) */
         } else {
 
+            /* Check that if this is one of the the points in the
+             * center of a disk that can only be turned by that disk
+             * and aren't reached by the other disk.
+             */
             if (count_a == (int32_t)ctx->n) {
                 return log((double)count_a);
             } else if (count_b == (int32_t)ctx->n) {
@@ -945,6 +1008,7 @@ void image_aa_sobel(struct render_ctx *ctx) {
                 double v;
                 if (ctx->order_delta == 0) {
                     v = log_order_to_val(log_avg_order, min_order, max_order);
+                    /*v = log_order_scale_cycle_to_val(log_avg_order);*/
                 } else {
                     v = delta_log_order_to_val(log_avg_order, min_order, max_order);
                 }
@@ -1173,7 +1237,8 @@ void ctx_to_png(struct render_ctx *ctx) {
 
                 double v;
                 if (ctx->order_delta == 0) {
-                    v = log_order_to_val(log_avg_order, min_order, max_order);
+                    /*v = log_order_to_val(log_avg_order, min_order, max_order);*/
+                    v = log_order_scale_cycle_to_val(log_avg_order);
                 } else {
                     v = delta_log_order_to_val(log_avg_order, min_order, max_order);
                 }
@@ -1255,7 +1320,8 @@ void ctx_to_png(struct render_ctx *ctx) {
                 uint8_t *G = &(image_data[o * 3 + 1]);
                 uint8_t *B = &(image_data[o * 3 + 2]);
 
-                val_to_rgb(vgrid[o], R, G, B, bright_factor);
+                /*val_to_rgb(vgrid[o], R, G, B, bright_factor);*/
+                val_to_rgb2(vgrid[o], R, G, B, bright_factor);
             }
         }
     }
@@ -1282,12 +1348,12 @@ int main (int argc, char **argv) {
     pthread_mutex_t grid_mutex = PTHREAD_MUTEX_INITIALIZER;
     ctx->grid_mutex = &(grid_mutex);
 
-    ctx->wedge_only = 1;
+    ctx->wedge_only = 0;
     ctx->box_only = 0;
-    ctx->order_delta = 0;
+    ctx->order_delta = 1;
 
-    ctx->n = 15;
-    ctx->r = 1.20;
+    ctx->n = 8;
+    ctx->r = 2.0;
     ctx->r_sq = ctx->r * ctx->r;
 
 
@@ -1417,25 +1483,25 @@ int main (int argc, char **argv) {
 
 
     /* Render full puzzle */
-    /* double goalw = 16384; */
-    /* double scalef = goalw / ((2.0 * ctx->r) + 2.0); */
-    /* ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef); */
-    /* ctx->img_h = (int)floor(2.0 * ctx->r * scalef); */
-    /* ctx->xmin = -1.0 - ctx->r; */
-    /* ctx->xmax = 1.0 + ctx->r; */
-    /* ctx->ymin = -1.0 * ctx->r; */
-    /* ctx->ymax = 1.0 * ctx->r; */
+    double goalw = 2048;
+    double scalef = goalw / ((2.0 * ctx->r) + 2.0);
+    ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef);
+    ctx->img_h = (int)floor(2.0 * ctx->r * scalef);
+    ctx->xmin = -1.0 - ctx->r;
+    ctx->xmax = 1.0 + ctx->r;
+    ctx->ymin = -1.0 * ctx->r;
+    ctx->ymax = 1.0 * ctx->r;
 
     /* Render wedge only */
-    double goalh = 1024;
-    double wedge_height = sqrt((double)ctx->r_sq - 1.0);
-    double wedge_width = (double)ctx->r - 1.0;
-    ctx->img_h = (int)floor(goalh);
-    ctx->img_w = (int)floor(goalh * (wedge_width / wedge_height));
-    ctx->xmin = 0.0 - wedge_width;
-    ctx->xmax = wedge_width;
-    ctx->ymin = 0.0 - wedge_height;
-    ctx->ymax = wedge_height;
+    /* double goalh = 1024; */
+    /* double wedge_height = sqrt((double)ctx->r_sq - 1.0); */
+    /* double wedge_width = (double)ctx->r - 1.0; */
+    /* ctx->img_h = (int)floor(goalh); */
+    /* ctx->img_w = (int)floor(goalh * (wedge_width / wedge_height)); */
+    /* ctx->xmin = 0.0 - wedge_width; */
+    /* ctx->xmax = wedge_width; */
+    /* ctx->ymin = 0.0 - wedge_height; */
+    /* ctx->ymax = wedge_height; */
 
     /* Render box only */
     /* double goalw = 4096; */
