@@ -20,12 +20,12 @@
 #include <png.h>
 
 
-#define ORD_LIMIT    (100 * 1000 * 1000)
+#define ORD_LIMIT    (500 * 1000 * 1000)
 #define NUM_THREADS  24
 #define LOG_SCALE    0x100000000
 #define GROW_VISITED 1024
 #define MAX_GEN_LEN  8
-
+#define FNAME_LEN    1024 /* max output file path length */
 
 /* #define naming conventions:
  * _T -> type
@@ -107,7 +107,7 @@ struct visited_ctx {
 };
 
 struct render_ctx {
-    char out[1024];
+    char out[FNAME_LEN];
     int verbose;
     uint32_t n;
     FLOAT_T r;
@@ -1340,7 +1340,7 @@ int main (int argc, char **argv) {
 
     struct render_ctx *ctx = calloc(1, sizeof(struct render_ctx));
 
-    strncpy(ctx->out, "/tmp/test.png", 1023);
+    strncpy(ctx->out, "/tmp/test.png", FNAME_LEN - 1);
 
     ctx->highest_order = 0;
     ctx->epsilon = EPSILON_L;
@@ -1350,16 +1350,24 @@ int main (int argc, char **argv) {
 
     ctx->wedge_only = 0;
     ctx->box_only = 0;
-    ctx->order_delta = 1;
+    ctx->order_delta = 0;
 
-    ctx->n = 8;
-    ctx->r = 2.0;
-    ctx->r_sq = ctx->r * ctx->r;
+    ctx->n = 12;
+    ctx->r = SQRT_F(2.0);
+    ctx->r_sq = 2.0;
+    ctx->sym180 = 1;
 
+    int got_r = 0;
+    int got_size = 0;
+    int goalh = 512; /* default sets height */
+    int goalw = 0; /* default sets height not width */
 
     static struct option long_options[] =
         {
             {"output",     required_argument, 0, 'o'},
+
+            {"width",     required_argument, 0, 'x'},
+            {"height",     required_argument, 0, 'y'},
 
             {"radius",     required_argument, 0, 'r'},
             {"n",          required_argument, 0, 'n'},
@@ -1379,8 +1387,8 @@ int main (int argc, char **argv) {
         /* getopt_long stores the option index here. */
         int option_index = 0;
 
-        int c = getopt_long (argc, argv, "o:r:n:v:",
-                             long_options, &option_index);
+        int c = getopt_long(argc, argv, "o:r:n:v:",
+                            long_options, &option_index);
 
         /* Detect the end of the options. */
         if (c == -1) {
@@ -1399,37 +1407,75 @@ int main (int argc, char **argv) {
             if (strcmp("radius-sq", long_options[option_index].name) == 0) {
                 ctx->r_sq = STRTO_F(optarg);
                 ctx->r= SQRT_F(ctx->r_sq);
+                got_r++;
+
+                if (ctx->r_sq <= FLOAT_L(0.0)) {
+                    fprintf(stderr, "Invalid number found: \"%s\". Aborting.\n", optarg);
+                    exit(-1);
+                }
 
                 break;
             }
 
             if (strcmp("color-delta", long_options[option_index].name) == 0) {
                 ctx->order_delta = 1;
-
                 break;
             }
 
             if (strcmp("wedge-only", long_options[option_index].name) == 0) {
                 ctx->wedge_only = 1;
-
                 break;
             }
 
             if (strcmp("verbose", long_options[option_index].name) == 0) {
                 ctx->verbose = 1;
-
                 break;
             }
 
-            abort();
+            abort(); /* should be unreachable */
+
+        case 'x':
+                ret = sscanf(optarg, "%u", &goalw);
+                assert(ret == 1);
+                goalh = 0;
+
+                got_size++;
+
+                if (goalw < 128) {
+                    fprintf(stderr, "Width must be at least 128\n");
+                    exit(-1);
+                }
+
+                break;
+
+        case 'y':
+                ret = sscanf(optarg, "%u", &goalh);
+                assert(ret == 1);
+                goalw = 0;
+
+                got_size++;
+
+                if (goalh < 128) {
+                    fprintf(stderr, "Height must be at least 128\n");
+                    exit(-1);
+                }
+
+                break;
 
         case 'o':
-            strncpy(ctx->out, optarg, 1023);
+            strncpy(ctx->out, optarg, FNAME_LEN - 1);
             break;
 
         case 'r':
             ctx->r = STRTO_F(optarg);
             ctx->r_sq = ctx->r * ctx->r;
+            got_r++;
+
+            if (ctx->r <= FLOAT_L(0.0)) {
+                fprintf(stderr, "Invalid number found: \"%s\". Aborting.\n", optarg);
+                exit(-1);
+            }
+
             break;
 
         case 'n':
@@ -1442,9 +1488,54 @@ int main (int argc, char **argv) {
             break;
 
         default:
-            abort();
+            fprintf(stderr, "Unrecognized option \"%c\". Aborting.\n", c);
+            exit(-1);
         }
     }
+
+    if (got_r > 1) {
+        fprintf(stderr, "You can only set the radius once (-r and --radius-sq are mutually exclusive)\n");
+        exit(-1);
+    }
+
+    if (got_size > 1) {
+        fprintf(stderr, "You can only set the size once (-x and -y are mutually exclusive)\n");
+        exit(-1);
+    }
+
+
+    /* Set image size based on specified goalh or goalw */
+    double aspect_r;
+    if (ctx->wedge_only == 0) {
+        double discs_height = 2.0 * (double)ctx->r;
+        double discs_width = (2.0 * (double)ctx->r) + 2.0;
+
+        aspect_r = discs_width / discs_height;
+
+        ctx->xmin = -1.0 - ctx->r;
+        ctx->xmax = 1.0 + ctx->r;
+        ctx->ymin = -1.0 * ctx->r;
+        ctx->ymax = 1.0 * ctx->r;
+    } else {
+        double wedge_half_height = sqrt((double)ctx->r_sq - 1.0);
+        double wedge_half_width = (double)ctx->r - 1.0;
+
+        aspect_r = wedge_half_width / wedge_half_height;
+
+        ctx->xmin = 0.0 - wedge_half_width;
+        ctx->xmax = wedge_half_width;
+        ctx->ymin = 0.0 - wedge_half_height;
+        ctx->ymax = wedge_half_height;
+    }
+
+    if (goalh != 0) {
+        goalw = (int)round((double)goalh * aspect_r);
+    } else {
+        goalh = (int)round((double)goalw / aspect_r);
+    }
+
+    ctx->img_w = goalw;
+    ctx->img_h = goalh;
 
 
     /* ctx->n = 10; */
@@ -1453,7 +1544,7 @@ int main (int argc, char **argv) {
     /* ctx->sym180 = 1; */
 
     /* ctx->n = 7; */
-    /* /\*ctx->r = FLOAT_L(1.62357492692335958);*\/ /\* tom rokicki approx *\/ */
+    /* ctx->r = FLOAT_L(1.62357492692335958); /\* tom rokicki approx *\/ */
     /* ctx->r = FLOAT_L(1.62318927293966937); /\* Eric's construction *\/ */
     /* ctx->r_sq = ctx->r * ctx->r; */
     /* ctx->sym180 = 0; */
@@ -1483,17 +1574,17 @@ int main (int argc, char **argv) {
 
 
     /* Render full puzzle */
-    double goalw = 2048;
-    double scalef = goalw / ((2.0 * ctx->r) + 2.0);
-    ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef);
-    ctx->img_h = (int)floor(2.0 * ctx->r * scalef);
-    ctx->xmin = -1.0 - ctx->r;
-    ctx->xmax = 1.0 + ctx->r;
-    ctx->ymin = -1.0 * ctx->r;
-    ctx->ymax = 1.0 * ctx->r;
+    /* double goalw = 2048; */
+    /* double scalef = goalw / ((2.0 * ctx->r) + 2.0); */
+    /* ctx->img_w = (int)floor(((2.0 * ctx->r) + 2.0) * scalef); */
+    /* ctx->img_h = (int)floor(2.0 * ctx->r * scalef); */
+    /* ctx->xmin = -1.0 - ctx->r; */
+    /* ctx->xmax = 1.0 + ctx->r; */
+    /* ctx->ymin = -1.0 * ctx->r; */
+    /* ctx->ymax = 1.0 * ctx->r; */
 
     /* Render wedge only */
-    /* double goalh = 1024; */
+    /* double goalh = 4096; */
     /* double wedge_height = sqrt((double)ctx->r_sq - 1.0); */
     /* double wedge_width = (double)ctx->r - 1.0; */
     /* ctx->img_h = (int)floor(goalh); */
@@ -1512,6 +1603,7 @@ int main (int argc, char **argv) {
     /* ctx->img_w = (int)floor(goalw); */
     /* ctx->img_h = (int)floor(goalw / ((ctx->xmax - ctx->xmin) / (ctx->ymax - ctx->ymin))); */
 
+
     ctx->pwidth = (ctx->xmax - ctx->xmin) / (double)ctx->img_w;
     ctx->pheight = (ctx->ymax - ctx->ymin) / (double)ctx->img_h;
     ctx->half_pwidth = ctx->pwidth / 2.0;
@@ -1525,10 +1617,14 @@ int main (int argc, char **argv) {
     ctx->rot[0] = turn_angle(ctx, -1);
     ctx->rot[1] = turn_angle(ctx, 1);
 
+    /* A B generator */
+    /* ctx->gen_len = 2; */
+    /* ctx->rot[0] = turn_angle(ctx, 1); */
+    /* ctx->rot[1] = turn_angle(ctx, 1); */
+
 
     /* A^-4 B generator */
     /* ctx->gen_len = 2; */
-
     /* ctx->rot[0] = turn_angle(ctx, -4); */
     /* ctx->rot[1] = turn_angle(ctx, 1); */
 

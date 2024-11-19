@@ -1,6 +1,7 @@
 CC=gcc
 
 CFLAGS=-std=gnu17 -Wall -Wextra -march=native -O2
+#CFLAGS=-std=gnu17 -Wall -Wextra -march=native -O2 -g
 #CFLAGS=-std=c99 -Wall -Wextra -march=native -O0 -frounding-math
 LIBS=-lm -lquadmath -lpng
 
