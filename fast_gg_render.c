@@ -125,6 +125,7 @@ struct render_ctx {
     int sym180;
     int order_delta;
     uint64_t highest_order;
+    double stretch_exp; /* order to val stretching */
 };
 
 
@@ -515,7 +516,7 @@ double delta_log_order_to_val(double log_order, double min_order, double max_ord
 }
 
 
-double log_order_to_val(double log_order, double min_order, double max_order) {
+double log_order_to_val(double log_order, double min_order, double max_order, double stretch_exp) {
 
     double log_min_order = log(min_order);
     double log_max_order = log(max_order);
@@ -527,7 +528,7 @@ double log_order_to_val(double log_order, double min_order, double max_order) {
     /* This stretches out the color space where more colors are allocated
      * to higher orders. An exponent of 1 is no stretch. 2.0 is a minor stretch.
      */
-    return 1.0 - pow((1.0 - v), 2.0);
+    return 1.0 - pow((1.0 - v), stretch_exp);
 }
 
 
@@ -1007,7 +1008,7 @@ void image_aa_sobel(struct render_ctx *ctx) {
 
                 double v;
                 if (ctx->order_delta == 0) {
-                    v = log_order_to_val(log_avg_order, min_order, max_order);
+                    v = log_order_to_val(log_avg_order, min_order, max_order, ctx->stretch_exp);
                     /*v = log_order_scale_cycle_to_val(log_avg_order);*/
                 } else {
                     v = delta_log_order_to_val(log_avg_order, min_order, max_order);
@@ -1237,8 +1238,8 @@ void ctx_to_png(struct render_ctx *ctx) {
 
                 double v;
                 if (ctx->order_delta == 0) {
-                    /*v = log_order_to_val(log_avg_order, min_order, max_order);*/
-                    v = log_order_scale_cycle_to_val(log_avg_order);
+                    v = log_order_to_val(log_avg_order, min_order, max_order, ctx->stretch_exp);
+                    /*v = log_order_scale_cycle_to_val(log_avg_order);*/
                 } else {
                     v = delta_log_order_to_val(log_avg_order, min_order, max_order);
                 }
@@ -1320,8 +1321,8 @@ void ctx_to_png(struct render_ctx *ctx) {
                 uint8_t *G = &(image_data[o * 3 + 1]);
                 uint8_t *B = &(image_data[o * 3 + 2]);
 
-                /*val_to_rgb(vgrid[o], R, G, B, bright_factor);*/
-                val_to_rgb2(vgrid[o], R, G, B, bright_factor);
+                val_to_rgb(vgrid[o], R, G, B, bright_factor);
+                /*val_to_rgb2(vgrid[o], R, G, B, bright_factor);*/
             }
         }
     }
@@ -1357,6 +1358,8 @@ int main (int argc, char **argv) {
     ctx->r_sq = 2.0;
     ctx->sym180 = 1;
 
+    ctx->stretch_exp = 1.0;
+
     int got_r = 0;
     int got_size = 0;
     int goalh = 512; /* default sets height */
@@ -1364,19 +1367,20 @@ int main (int argc, char **argv) {
 
     static struct option long_options[] =
         {
-            {"output",     required_argument, 0, 'o'},
+            {"output",     required_argument,  0, 'o'},
 
-            {"width",     required_argument, 0, 'x'},
-            {"height",     required_argument, 0, 'y'},
+            {"width",     required_argument,   0, 'x'},
+            {"height",     required_argument,  0, 'y'},
 
-            {"radius",     required_argument, 0, 'r'},
-            {"n",          required_argument, 0, 'n'},
-            {"radius-sq",  required_argument, 0,   0},
+            {"radius",     required_argument,  0, 'r'},
+            {"n",          required_argument,  0, 'n'},
+            {"radius-sq",  required_argument,  0,   0},
 
-            {"color-delta", no_argument,      0,   0},
-            {"wedge-only",  no_argument,      0,   0},
+            {"color-delta", no_argument,       0,   0},
+            {"stretch-exp", required_argument, 0,   0},
+            {"wedge-only",  no_argument,       0,   0},
 
-            {"verbose",     no_argument,      0, 'v'},
+            {"verbose",     no_argument,       0, 'v'},
 
             /* Terminate list */
             {0, 0, 0, 0}
@@ -1410,7 +1414,7 @@ int main (int argc, char **argv) {
                 got_r++;
 
                 if (ctx->r_sq <= FLOAT_L(0.0)) {
-                    fprintf(stderr, "Invalid number found: \"%s\". Aborting.\n", optarg);
+                    fprintf(stderr, "Invalid radius-sq number found: \"%s\". Aborting.\n", optarg);
                     exit(-1);
                 }
 
@@ -1421,6 +1425,18 @@ int main (int argc, char **argv) {
                 ctx->order_delta = 1;
                 break;
             }
+
+            if (strcmp("stretch-exp", long_options[option_index].name) == 0) {
+                ctx->stretch_exp = strtod(optarg, NULL);
+
+                if (ctx->stretch_exp <= 0.0) {
+                    fprintf(stderr, "Invalid stretch-exp number found: \"%s\". Aborting.\n", optarg);
+                    exit(-1);
+                }
+
+                break;
+            }
+
 
             if (strcmp("wedge-only", long_options[option_index].name) == 0) {
                 ctx->wedge_only = 1;
@@ -1472,7 +1488,7 @@ int main (int argc, char **argv) {
             got_r++;
 
             if (ctx->r <= FLOAT_L(0.0)) {
-                fprintf(stderr, "Invalid number found: \"%s\". Aborting.\n", optarg);
+                fprintf(stderr, "Invalid radius number found: \"%s\". Aborting.\n", optarg);
                 exit(-1);
             }
 
