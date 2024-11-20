@@ -532,6 +532,28 @@ double log_order_to_val(double log_order, double min_order, double max_order, do
 }
 
 
+double log_order_atan_to_val(double log_order, double log_min_order, double log_max_order, double stretch_exp) {
+
+    /* Saturate order in case of minor roundoff issues */
+    if (log_order > log_max_order) {
+        log_order = log_max_order;
+    }
+    if (log_order < log_min_order) {
+        log_order = log_min_order;
+    }
+
+    /* atan -> val mapping */
+    double v = atan2(log_order - log_min_order, 1.0) / atan2(log_max_order - log_min_order, 1.0);
+
+    /* Saturate (shouldn't happen if atan2 behaves itself) */
+    if (v > 1.0) {
+        v = 1.0;
+    }
+
+    return 1.0 - pow((1.0 - v), stretch_exp);
+}
+
+
 double log_order_scale_cycle_to_val(double log_order) {
 
     double neg = 1;
@@ -1009,6 +1031,7 @@ void image_aa_sobel(struct render_ctx *ctx) {
                 double v;
                 if (ctx->order_delta == 0) {
                     v = log_order_to_val(log_avg_order, min_order, max_order, ctx->stretch_exp);
+                    /*v = log_order_atan_to_val(log_avg_order, min_order, max_order, ctx->stretch_exp);*/
                     /*v = log_order_scale_cycle_to_val(log_avg_order);*/
                 } else {
                     v = delta_log_order_to_val(log_avg_order, min_order, max_order);
@@ -1239,6 +1262,7 @@ void ctx_to_png(struct render_ctx *ctx) {
                 double v;
                 if (ctx->order_delta == 0) {
                     v = log_order_to_val(log_avg_order, min_order, max_order, ctx->stretch_exp);
+                    /*v = log_order_atan_to_val(log_avg_order, log_min_order, log_max_order, ctx->stretch_exp);*/
                     /*v = log_order_scale_cycle_to_val(log_avg_order);*/
                 } else {
                     v = delta_log_order_to_val(log_avg_order, min_order, max_order);
